@@ -1,405 +1,54 @@
 export type WordLevel = 'cet4' | 'cet6';
 
+export type SentenceExample = {
+  english: string;
+  chinese: string;
+};
+
 export type Word = {
   id: string;
   word: string;
   phonetic: string;
   partOfSpeech: string;
   meaning: string;
-  collocation: string;
-  example: string;
+  examples: SentenceExample[];
   level: WordLevel;
-  topic: string;
+  rank: number;
 };
 
-export const WORDS: Word[] = [
-  {
-    id: 'abandon',
-    word: 'abandon',
-    phonetic: '/əˈbændən/',
-    partOfSpeech: 'v.',
-    meaning: '放弃；抛弃',
-    collocation: 'abandon a plan',
-    example: 'They refused to abandon the project after the first setback.',
-    level: 'cet4',
-    topic: '行动',
-  },
-  {
-    id: 'accurate',
-    word: 'accurate',
-    phonetic: '/ˈækjərət/',
-    partOfSpeech: 'adj.',
-    meaning: '准确的；精确的',
-    collocation: 'accurate information',
-    example: 'The report gives an accurate picture of the current situation.',
-    level: 'cet4',
-    topic: '描述',
-  },
-  {
-    id: 'accumulate',
-    word: 'accumulate',
-    phonetic: '/əˈkjuːmjəleɪt/',
-    partOfSpeech: 'v.',
-    meaning: '积累；积聚',
-    collocation: 'accumulate experience',
-    example: 'Small savings can accumulate into a useful amount over time.',
-    level: 'cet4',
-    topic: '变化',
-  },
-  {
-    id: 'benefit',
-    word: 'benefit',
-    phonetic: '/ˈbenɪfɪt/',
-    partOfSpeech: 'n. / v.',
-    meaning: '益处；使受益',
-    collocation: 'benefit from',
-    example: 'Students benefit from receiving clear and timely feedback.',
-    level: 'cet4',
-    topic: '社会',
-  },
-  {
-    id: 'circumstance',
-    word: 'circumstance',
-    phonetic: '/ˈsɜːrkəmstæns/',
-    partOfSpeech: 'n.',
-    meaning: '情况；条件',
-    collocation: 'under the circumstances',
-    example: 'Under the circumstances, postponing the meeting was sensible.',
-    level: 'cet4',
-    topic: '情境',
-  },
-  {
-    id: 'decline',
-    word: 'decline',
-    phonetic: '/dɪˈklaɪn/',
-    partOfSpeech: 'v. / n.',
-    meaning: '下降；谢绝',
-    collocation: 'a sharp decline',
-    example: 'The number of visitors declined during the winter months.',
-    level: 'cet4',
-    topic: '变化',
-  },
-  {
-    id: 'efficient',
-    word: 'efficient',
-    phonetic: '/ɪˈfɪʃənt/',
-    partOfSpeech: 'adj.',
-    meaning: '效率高的；高效的',
-    collocation: 'energy-efficient',
-    example: 'A simple routine can make your study time more efficient.',
-    level: 'cet4',
-    topic: '学习',
-  },
-  {
-    id: 'essential',
-    word: 'essential',
-    phonetic: '/ɪˈsenʃl/',
-    partOfSpeech: 'adj. / n.',
-    meaning: '必不可少的；要点',
-    collocation: 'be essential to',
-    example: 'Regular review is essential to long-term memory.',
-    level: 'cet4',
-    topic: '学习',
-  },
-  {
-    id: 'establish',
-    word: 'establish',
-    phonetic: '/ɪˈstæblɪʃ/',
-    partOfSpeech: 'v.',
-    meaning: '建立；确立；证实',
-    collocation: 'establish a habit',
-    example: 'It takes time to establish a steady learning habit.',
-    level: 'cet4',
-    topic: '行动',
-  },
-  {
-    id: 'feature',
-    word: 'feature',
-    phonetic: '/ˈfiːtʃər/',
-    partOfSpeech: 'n. / v.',
-    meaning: '特征；以……为特色',
-    collocation: 'a key feature',
-    example: 'The quiet reading room is a key feature of the new library.',
-    level: 'cet4',
-    topic: '描述',
-  },
-  {
-    id: 'generate',
-    word: 'generate',
-    phonetic: '/ˈdʒenəreɪt/',
-    partOfSpeech: 'v.',
-    meaning: '产生；生成',
-    collocation: 'generate electricity',
-    example: 'The discussion generated several practical ideas.',
-    level: 'cet4',
-    topic: '行动',
-  },
-  {
-    id: 'indicate',
-    word: 'indicate',
-    phonetic: '/ˈɪndɪkeɪt/',
-    partOfSpeech: 'v.',
-    meaning: '表明；指出',
-    collocation: 'results indicate that',
-    example: 'The results indicate that short reviews are more effective.',
-    level: 'cet4',
-    topic: '研究',
-  },
-  {
-    id: 'maintain',
-    word: 'maintain',
-    phonetic: '/meɪnˈteɪn/',
-    partOfSpeech: 'v.',
-    meaning: '维持；保养；坚持认为',
-    collocation: 'maintain a balance',
-    example: 'Try to maintain a balance between study and rest.',
-    level: 'cet4',
-    topic: '行动',
-  },
-  {
-    id: 'occur',
-    word: 'occur',
-    phonetic: '/əˈkɜːr/',
-    partOfSpeech: 'v.',
-    meaning: '发生；出现',
-    collocation: 'occur to somebody',
-    example: 'Most errors occur when learners rush through the question.',
-    level: 'cet4',
-    topic: '变化',
-  },
-  {
-    id: 'perspective',
-    word: 'perspective',
-    phonetic: '/pərˈspektɪv/',
-    partOfSpeech: 'n.',
-    meaning: '观点；视角',
-    collocation: 'from a different perspective',
-    example: 'Travel allows people to see familiar problems from a new perspective.',
-    level: 'cet4',
-    topic: '观点',
-  },
-  {
-    id: 'significant',
-    word: 'significant',
-    phonetic: '/sɪɡˈnɪfɪkənt/',
-    partOfSpeech: 'adj.',
-    meaning: '重要的；显著的',
-    collocation: 'a significant difference',
-    example: 'Even ten minutes of review can make a significant difference.',
-    level: 'cet4',
-    topic: '描述',
-  },
-  {
-    id: 'transform',
-    word: 'transform',
-    phonetic: '/trænsˈfɔːrm/',
-    partOfSpeech: 'v.',
-    meaning: '改变；使转变',
-    collocation: 'transform into',
-    example: 'Consistent practice can transform a weak skill into a strength.',
-    level: 'cet4',
-    topic: '变化',
-  },
-  {
-    id: 'consecutive',
-    word: 'consecutive',
-    phonetic: '/kənˈsekjətɪv/',
-    partOfSpeech: 'adj.',
-    meaning: '连续的；不间断的',
-    collocation: 'for three consecutive days',
-    example: 'She completed her study plan for seven consecutive days.',
-    level: 'cet6',
-    topic: '描述',
-  },
-  {
-    id: 'ambiguous',
-    word: 'ambiguous',
-    phonetic: '/æmˈbɪɡjuəs/',
-    partOfSpeech: 'adj.',
-    meaning: '模棱两可的；含糊的',
-    collocation: 'an ambiguous statement',
-    example: 'The wording was ambiguous and led to two different interpretations.',
-    level: 'cet6',
-    topic: '语言',
-  },
-  {
-    id: 'coherent',
-    word: 'coherent',
-    phonetic: '/koʊˈhɪrənt/',
-    partOfSpeech: 'adj.',
-    meaning: '连贯的；条理清楚的',
-    collocation: 'a coherent argument',
-    example: 'A good essay presents its ideas in a coherent order.',
-    level: 'cet6',
-    topic: '写作',
-  },
-  {
-    id: 'compelling',
-    word: 'compelling',
-    phonetic: '/kəmˈpelɪŋ/',
-    partOfSpeech: 'adj.',
-    meaning: '令人信服的；引人入胜的',
-    collocation: 'compelling evidence',
-    example: 'The researchers offered compelling evidence for their conclusion.',
-    level: 'cet6',
-    topic: '研究',
-  },
-  {
-    id: 'controversy',
-    word: 'controversy',
-    phonetic: '/ˈkɑːntrəvɜːrsi/',
-    partOfSpeech: 'n.',
-    meaning: '争议；争论',
-    collocation: 'cause controversy',
-    example: 'The proposal caused controversy among local residents.',
-    level: 'cet6',
-    topic: '社会',
-  },
-  {
-    id: 'deteriorate',
-    word: 'deteriorate',
-    phonetic: '/dɪˈtɪriəreɪt/',
-    partOfSpeech: 'v.',
-    meaning: '恶化；变坏',
-    collocation: 'conditions deteriorate',
-    example: 'Without regular maintenance, the equipment will deteriorate.',
-    level: 'cet6',
-    topic: '变化',
-  },
-  {
-    id: 'dilemma',
-    word: 'dilemma',
-    phonetic: '/dɪˈlemə/',
-    partOfSpeech: 'n.',
-    meaning: '进退两难的处境',
-    collocation: 'face a dilemma',
-    example: 'Many graduates face the dilemma of choosing between stability and growth.',
-    level: 'cet6',
-    topic: '社会',
-  },
-  {
-    id: 'eliminate',
-    word: 'eliminate',
-    phonetic: '/ɪˈlɪmɪneɪt/',
-    partOfSpeech: 'v.',
-    meaning: '消除；淘汰',
-    collocation: 'eliminate errors',
-    example: 'A final check can eliminate many careless errors.',
-    level: 'cet6',
-    topic: '行动',
-  },
-  {
-    id: 'empirical',
-    word: 'empirical',
-    phonetic: '/ɪmˈpɪrɪkl/',
-    partOfSpeech: 'adj.',
-    meaning: '以实验或观察为依据的',
-    collocation: 'empirical research',
-    example: 'The claim should be supported by empirical evidence.',
-    level: 'cet6',
-    topic: '研究',
-  },
-  {
-    id: 'inevitable',
-    word: 'inevitable',
-    phonetic: '/ɪnˈevɪtəbl/',
-    partOfSpeech: 'adj.',
-    meaning: '不可避免的',
-    collocation: 'an inevitable result',
-    example: 'Some mistakes are inevitable when learning a new skill.',
-    level: 'cet6',
-    topic: '描述',
-  },
-  {
-    id: 'inherent',
-    word: 'inherent',
-    phonetic: '/ɪnˈhɪrənt/',
-    partOfSpeech: 'adj.',
-    meaning: '内在的；固有的',
-    collocation: 'be inherent in',
-    example: 'Uncertainty is inherent in any long-term prediction.',
-    level: 'cet6',
-    topic: '描述',
-  },
-  {
-    id: 'manipulate',
-    word: 'manipulate',
-    phonetic: '/məˈnɪpjuleɪt/',
-    partOfSpeech: 'v.',
-    meaning: '操纵；熟练操作',
-    collocation: 'manipulate data',
-    example: 'The software allows users to manipulate images with precision.',
-    level: 'cet6',
-    topic: '科技',
-  },
-  {
-    id: 'prevalent',
-    word: 'prevalent',
-    phonetic: '/ˈprevələnt/',
-    partOfSpeech: 'adj.',
-    meaning: '普遍的；流行的',
-    collocation: 'be prevalent among',
-    example: 'Online learning is increasingly prevalent among university students.',
-    level: 'cet6',
-    topic: '社会',
-  },
-  {
-    id: 'reluctant',
-    word: 'reluctant',
-    phonetic: '/rɪˈlʌktənt/',
-    partOfSpeech: 'adj.',
-    meaning: '不情愿的；勉强的',
-    collocation: 'be reluctant to',
-    example: 'He was reluctant to change a routine that had worked for years.',
-    level: 'cet6',
-    topic: '态度',
-  },
-  {
-    id: 'subordinate',
-    word: 'subordinate',
-    phonetic: '/səˈbɔːrdɪnət/',
-    partOfSpeech: 'adj. / n.',
-    meaning: '次要的；下属',
-    collocation: 'be subordinate to',
-    example: 'Minor details should remain subordinate to the main argument.',
-    level: 'cet6',
-    topic: '描述',
-  },
-  {
-    id: 'tentative',
-    word: 'tentative',
-    phonetic: '/ˈtentətɪv/',
-    partOfSpeech: 'adj.',
-    meaning: '暂定的；试探性的',
-    collocation: 'a tentative plan',
-    example: 'We reached a tentative agreement and planned to review it later.',
-    level: 'cet6',
-    topic: '态度',
-  },
-  {
-    id: 'unprecedented',
-    word: 'unprecedented',
-    phonetic: '/ʌnˈpresɪdentɪd/',
-    partOfSpeech: 'adj.',
-    meaning: '前所未有的',
-    collocation: 'at an unprecedented rate',
-    example: 'The city has expanded at an unprecedented rate.',
-    level: 'cet6',
-    topic: '变化',
-  },
-  {
-    id: 'vulnerable',
-    word: 'vulnerable',
-    phonetic: '/ˈvʌlnərəbl/',
-    partOfSpeech: 'adj.',
-    meaning: '脆弱的；易受伤害的',
-    collocation: 'be vulnerable to',
-    example: 'Young plants are particularly vulnerable to sudden temperature changes.',
-    level: 'cet6',
-    topic: '描述',
-  },
-];
+export const WORD_COUNTS = {
+  cet4: 4533,
+  cet6Extra: 1176,
+  cet6Total: 5709,
+} as const;
 
-export function getWordsForLevel(level: WordLevel) {
-  return level === 'cet4' ? WORDS.filter((item) => item.level === 'cet4') : WORDS;
+const wordCache = new Map<WordLevel, Promise<Word[]>>();
+
+async function fetchWordFile(path: string) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`词库加载失败：${response.status}`);
+  return response.json() as Promise<Word[]>;
+}
+
+export function loadWords(level: WordLevel) {
+  const cached = wordCache.get(level);
+  if (cached) return cached;
+
+  const request = Promise.all([
+    fetchWordFile('/data/cet4.json'),
+    ...(level === 'cet6' ? [fetchWordFile('/data/cet6.json')] : []),
+  ]).then((groups) => {
+    const unique = new Map<string, Word>();
+    for (const word of groups.flat()) {
+      if (!unique.has(word.id)) unique.set(word.id, word);
+    }
+    return Array.from(unique.values()).sort(
+      (left, right) => left.rank - right.rank || left.word.localeCompare(right.word),
+    );
+  }).catch((error) => {
+    wordCache.delete(level);
+    throw error;
+  });
+  wordCache.set(level, request);
+  return request;
 }

@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: '词序｜在句子里背四六级单词',
-  description: '按考试日期安排每天的背词量，先听句子，再结合语境记住四六级单词。',
+  description: '完整四六级词库，按考试日期和基础安排每天的背词量，先听句子，再结合双语语境记住单词。',
   openGraph: {
     title: '词序｜在句子里背四六级单词',
-    description: '按考试日期安排背词量，先听句子，再结合语境记。',
+    description: '完整四六级词库，按考试日期安排背词量，先听句子，再结合双语语境记。',
     locale: 'zh_CN',
     type: 'website',
   },
   twitter: {
     card: 'summary',
     title: '词序｜在句子里背四六级单词',
-    description: '按考试日期安排背词量，先听句子，再结合语境记。',
+    description: '完整四六级词库，按考试日期安排背词量，先听句子，再结合双语语境记。',
   },
 };
 

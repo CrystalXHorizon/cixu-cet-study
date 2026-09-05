@@ -41,7 +41,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { getWordsForLevel, WORDS, type Word, type WordLevel } from '@/lib/words';
+import {
+  loadWords,
+  WORD_COUNTS,
+  type SentenceExample,
+  type Word,
+  type WordLevel,
+} from '@/lib/words';
 
 type View = 'today' | 'words' | 'mistakes' | 'progress' | 'review';
 type WordFilter = 'all' | 'new' | 'learning' | 'mastered';
@@ -51,6 +57,7 @@ type LearningPhase = 'listen' | 'study' | 'recall' | 'review-listen' | 'review-c
 type SessionItem = {
   wordId: string;
   phase: LearningPhase;
+  exampleIndex?: number;
   retry?: boolean;
 };
 
@@ -159,12 +166,15 @@ function daysUntil(dateKey: string) {
   return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86_400_000));
 }
 
-function studyPlan(state: Pick<StudyState, 'level' | 'examDate' | 'gaokaoScore' | 'gaokaoFullScore'>) {
+function studyPlan(
+  state: Pick<StudyState, 'level' | 'examDate' | 'gaokaoScore' | 'gaokaoFullScore'>,
+  totalWords: number = state.level === 'cet4' ? WORD_COUNTS.cet4 : WORD_COUNTS.cet6Total,
+  remainingWords: number = totalWords,
+) {
   const daysLeft = daysUntil(state.examDate);
   const scoreRate = state.gaokaoFullScore > 0 ? state.gaokaoScore / state.gaokaoFullScore : 0.67;
-  const baseGap = state.level === 'cet4' ? 1800 : 2100;
-  const foundationFactor = scoreRate < 0.55 ? 1.15 : scoreRate < 0.7 ? 1 : scoreRate < 0.83 ? 0.86 : 0.72;
-  const estimatedGap = Math.round(baseGap * foundationFactor);
+  const foundationFactor = scoreRate < 0.55 ? 0.78 : scoreRate < 0.7 ? 0.68 : scoreRate < 0.83 ? 0.56 : 0.44;
+  const estimatedGap = Math.min(remainingWords, Math.round(totalWords * foundationFactor));
   const consolidationDays = daysLeft >= 90 ? 21 : daysLeft >= 45 ? 14 : Math.max(5, Math.round(daysLeft * 0.25));
   const learningDays = Math.max(1, daysLeft - consolidationDays);
   const rawDaily = Math.ceil(estimatedGap / learningDays);
@@ -174,6 +184,21 @@ function studyPlan(state: Pick<StudyState, 'level' | 'examDate' | 'gaokaoScore' 
   const minimum = daysLeft > 14 ? 10 : 5;
   const dailyNew = Math.max(minimum, Math.min(cap, Math.ceil(rawDaily / 5) * 5));
   return { daysLeft, phase, dailyNew, estimatedGap, consolidationDays };
+}
+
+function prioritizeNewWords(
+  words: Word[],
+  state: Pick<StudyState, 'gaokaoScore' | 'gaokaoFullScore'>,
+) {
+  const scoreRate = state.gaokaoFullScore > 0
+    ? state.gaokaoScore / state.gaokaoFullScore
+    : 0.67;
+  const startingRank = scoreRate < 0.55 ? 900 : scoreRate < 0.7 ? 2500 : scoreRate < 0.83 ? 5000 : 8000;
+  return [...words].sort((left, right) => {
+    const leftDistance = Math.abs(left.rank - startingRank);
+    const rightDistance = Math.abs(right.rank - startingRank);
+    return leftDistance - rightDistance || left.rank - right.rank;
+  });
 }
 
 function wordStatus(record?: ReviewRecord): WordFilter {
@@ -193,6 +218,35 @@ function speakWord(word: string) {
   utterance.lang = 'en-US';
   utterance.rate = 0.82;
   window.speechSynthesis.speak(utterance);
+}
+
+const pronunciationCache = new Map<string, string>();
+
+async function playWordPronunciation(word: string) {
+  const key = word.toLocaleLowerCase('en-US');
+  try {
+    let audioUrl = pronunciationCache.get(key);
+    if (!audioUrl) {
+      const response = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      );
+      if (!response.ok) throw new Error('pronunciation unavailable');
+      const entries = (await response.json()) as Array<{
+        phonetics?: Array<{ audio?: string }>;
+      }>;
+      const rawUrl = entries
+        .flatMap((entry) => entry.phonetics ?? [])
+        .map((phonetic) => phonetic.audio)
+        .find(Boolean);
+      if (!rawUrl) throw new Error('pronunciation unavailable');
+      audioUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
+      pronunciationCache.set(key, audioUrl);
+    }
+    const audio = new Audio(audioUrl);
+    await audio.play();
+  } catch {
+    speakWord(word);
+  }
 }
 
 function speakSentence(sentence: string) {
@@ -235,8 +289,13 @@ export function VocabApp() {
   const [sessionStats, setSessionStats] = useState({ reviewed: 0, correct: 0 });
   const [sessionDone, setSessionDone] = useState(false);
   const [notice, setNotice] = useState('');
+  const [activeWords, setActiveWords] = useState<Word[]>([]);
+  const [loadedLevel, setLoadedLevel] = useState<WordLevel | null>(null);
+  const [failedLevel, setFailedLevel] = useState<WordLevel | null>(null);
+  const [wordLoadAttempt, setWordLoadAttempt] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
   const stateRef = useRef(study);
+  const wordsRef = useRef(activeWords);
 
   useEffect(() => {
     try {
@@ -272,18 +331,37 @@ export function VocabApp() {
   }, [ready, study]);
 
   useEffect(() => {
+    wordsRef.current = activeWords;
+  }, [activeWords]);
+
+  useEffect(() => {
+    if (!ready || !study.initialized) return;
+    let cancelled = false;
+    void loadWords(study.level)
+      .then((words) => {
+        if (cancelled) return;
+        setActiveWords(words);
+        setLoadedLevel(study.level);
+        setFailedLevel(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFailedLevel(study.level);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, study.initialized, study.level, wordLoadAttempt]);
+
+  useEffect(() => {
     if (!notice) return;
     const timeout = window.setTimeout(() => setNotice(''), 2400);
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
-  const activeWords = useMemo(
-    () => getWordsForLevel(study.level),
-    [study.level],
-  );
   const wordMap = useMemo(
-    () => new Map(WORDS.map((item) => [item.id, item])),
-    [],
+    () => new Map(activeWords.map((item) => [item.id, item])),
+    [activeWords],
   );
   const today = dayKey();
   const dueWords = activeWords.filter((word) => {
@@ -298,7 +376,7 @@ export function VocabApp() {
     (word) => wordStatus(study.reviews[word.id]) === 'learning',
   ).length;
   const todayRecord = study.history[today] ?? { reviewed: 0, correct: 0 };
-  const plan = studyPlan(study);
+  const plan = studyPlan(study, activeWords.length, newWords.length);
   const todayNewGoal = Math.min(plan.dailyNew, newWords.length);
   const todayTarget = Math.max(1, dueWords.length + todayNewGoal);
   const todayProgress = Math.min(
@@ -306,37 +384,51 @@ export function VocabApp() {
     Math.round((todayRecord.reviewed / todayTarget) * 100),
   );
 
-  function sessionQueue(mode: SessionMode, source = study): SessionItem[] {
-    const pool = getWordsForLevel(source.level);
+  function sessionQueue(mode: SessionMode, source = study, pool = activeWords): SessionItem[] {
     if (mode === 'mistakes') {
       return source.mistakes
         .filter((id) => pool.some((word) => word.id === id))
         .slice(0, 15)
-        .map((wordId, index) => ({
-          wordId,
-          phase: index % 3 === 0 ? 'review-listen' : 'review-context',
-        }));
+        .map((wordId, index) => {
+          const word = pool.find((item) => item.id === wordId);
+          const record = source.reviews[wordId];
+          const attempts = (record?.correct ?? 0) + (record?.wrong ?? 0);
+          return {
+            wordId,
+            exampleIndex: word?.examples.length ? attempts % word.examples.length : 0,
+            phase: index % 3 === 0 ? 'review-listen' : 'review-context',
+          };
+        });
     }
     if (mode === 'review') {
       return pool
-      .filter((word) => {
-        const record = source.reviews[word.id];
-        return record && record.due <= dayKey();
-      })
+        .filter((word) => {
+          const record = source.reviews[word.id];
+          return record && record.due <= dayKey();
+        })
         .slice(0, 20)
-        .map((word, index) => ({
-          wordId: word.id,
-          phase: index % 3 === 0 ? 'review-listen' : 'review-context',
-        }));
+        .map((word, index) => {
+          const record = source.reviews[word.id];
+          const attempts = (record?.correct ?? 0) + (record?.wrong ?? 0);
+          return {
+            wordId: word.id,
+            exampleIndex: word.examples.length ? attempts % word.examples.length : 0,
+            phase: index % 3 === 0 ? 'review-listen' : 'review-context',
+          };
+        });
     }
     const groupSize = 5;
-    const fresh = pool
+    const fresh = prioritizeNewWords(pool, source)
       .filter((word) => !source.reviews[word.id])
-      .slice(0, Math.min(groupSize, studyPlan(source).dailyNew));
+      .slice(0, Math.min(groupSize, studyPlan(source, pool.length).dailyNew));
     return [
-      ...fresh.map((word) => ({ wordId: word.id, phase: 'listen' as const })),
-      ...fresh.map((word) => ({ wordId: word.id, phase: 'study' as const })),
-      ...fresh.map((word) => ({ wordId: word.id, phase: 'recall' as const })),
+      ...fresh.map((word) => ({ wordId: word.id, phase: 'listen' as const, exampleIndex: 0 })),
+      ...fresh.map((word) => ({ wordId: word.id, phase: 'study' as const, exampleIndex: 0 })),
+      ...fresh.map((word) => ({
+        wordId: word.id,
+        phase: 'recall' as const,
+        exampleIndex: word.examples.length > 1 ? 1 : 0,
+      })),
     ];
   }
 
@@ -381,7 +473,7 @@ export function VocabApp() {
           annotations: { readOnlyHint: true, untrustedContentHint: false },
           execute() {
             const current = stateRef.current;
-            const pool = getWordsForLevel(current.level);
+            const pool = wordsRef.current;
             const mastered = pool.filter(
               (word) => wordStatus(current.reviews[word.id]) === 'mastered',
             ).length;
@@ -426,7 +518,9 @@ export function VocabApp() {
             if (!current.initialized) {
               throw new Error('请先完成首次词汇设置');
             }
-            const queue = sessionQueue(mode, current);
+            const pool = wordsRef.current;
+            if (pool.length === 0) throw new Error('词库仍在加载，请稍后再试');
+            const queue = sessionQueue(mode, current, pool);
             if (queue.length === 0) {
               throw new Error(
                 mode === 'mistakes'
@@ -537,7 +631,15 @@ export function VocabApp() {
       setSessionItems((current) => {
         const next = [...current];
         const insertAt = Math.min(sessionIndex + (grade === 0 ? 4 : 7), next.length);
-        next.splice(insertAt, 0, { wordId: word.id, phase: 'recall', retry: true });
+        const currentExample = current[sessionIndex]?.exampleIndex ?? 0;
+        next.splice(insertAt, 0, {
+          wordId: word.id,
+          phase: 'recall',
+          exampleIndex: word.examples.length > 1
+            ? (currentExample + 1) % word.examples.length
+            : 0,
+          retry: true,
+        });
         return next;
       });
     }
@@ -651,13 +753,45 @@ export function VocabApp() {
     );
   }
 
+  if (loadedLevel !== study.level) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background px-5">
+        <div className="max-w-sm text-center">
+          {failedLevel === study.level ? (
+            <>
+              <CircleAlert className="mx-auto size-6 text-destructive" />
+              <h1 className="mt-4 font-heading text-xl font-semibold">词库没有加载成功</h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">检查网络后重试，学习记录不会受影响。</p>
+              <Button
+                className="mt-5 rounded-full px-5"
+                onClick={() => {
+                  setFailedLevel(null);
+                  setWordLoadAttempt((value) => value + 1);
+                }}
+              >
+                重新加载
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="size-2 animate-pulse rounded-full bg-primary" />
+              正在载入 {levelLabel(study.level)}
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   const currentItem = sessionItems[sessionIndex];
   const currentWord = wordMap.get(currentItem?.wordId);
+  const currentExample = currentWord?.examples[currentItem?.exampleIndex ?? 0] ?? currentWord?.examples[0];
 
-  if (view === 'review' && currentWord && currentItem) {
+  if (view === 'review' && currentWord && currentItem && currentExample) {
     return (
       <ReviewSession
         word={currentWord}
+        example={currentExample}
         phase={currentItem.phase}
         retry={Boolean(currentItem.retry)}
         sessionMode={sessionMode}
@@ -669,8 +803,8 @@ export function VocabApp() {
         onReveal={() => setRevealed(true)}
         onGrade={(grade) => gradeRecall(currentWord, grade)}
         onAdvance={advanceSession}
-        onSpeak={() => speakWord(currentWord.word)}
-        onListen={() => speakSentence(currentWord.example)}
+        onSpeak={() => void playWordPronunciation(currentWord.word)}
+        onListen={() => speakSentence(currentExample.english)}
         onExit={() => setView('today')}
       />
     );
@@ -720,7 +854,7 @@ export function VocabApp() {
               onSearch={setSearch}
               onFilter={setWordFilter}
               onSave={toggleSaved}
-              onSpeak={speakWord}
+              onSpeak={(word) => void playWordPronunciation(word)}
             />
           )}
           {view === 'mistakes' && (
@@ -730,7 +864,7 @@ export function VocabApp() {
                 .filter((word): word is Word => Boolean(word))}
               reviews={study.reviews}
               onStart={() => startSession('mistakes')}
-              onSpeak={speakWord}
+              onSpeak={(word) => void playWordPronunciation(word)}
             />
           )}
           {view === 'progress' && (
@@ -1041,7 +1175,7 @@ function TodayView({
             </span>
           </div>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            每组 5 个：先听句子，再理解词义，最后回到原句主动回忆。
+            每组 5 个：先听句子，再理解词义，最后换一句话主动回忆。
           </p>
           <Button className="mt-5 w-full" disabled={newCount === 0} onClick={onStartNew}>
             背一组新词
@@ -1109,13 +1243,18 @@ function WordLibrary({
   onSave(id: string): void;
   onSpeak(word: string): void;
 }) {
+  const [visibleState, setVisibleState] = useState({ key: '', count: 80 });
   const filtered = words.filter((word) => {
     const query = search.trim().toLocaleLowerCase();
     const matchesSearch =
       !query ||
-      word.word.includes(query) ||
+      word.word.toLocaleLowerCase().includes(query) ||
       word.meaning.includes(query) ||
-      word.collocation.toLocaleLowerCase().includes(query);
+      word.examples.some(
+        (example) =>
+          example.english.toLocaleLowerCase().includes(query) ||
+          example.chinese.includes(query),
+      );
     return (
       matchesSearch &&
       (filter === 'all' || wordStatus(reviews[word.id]) === filter)
@@ -1128,6 +1267,10 @@ function WordLibrary({
     learning: '学习中',
     mastered: '已掌握',
   };
+
+  const visibleKey = `${filter}:${search}`;
+  const visibleCount = visibleState.key === visibleKey ? visibleState.count : 80;
+  const visibleWords = filtered.slice(0, visibleCount);
 
   return (
     <>
@@ -1143,7 +1286,7 @@ function WordLibrary({
           <Input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
-            placeholder="搜索单词、释义或搭配"
+            placeholder="搜索单词、释义或例句"
             className="h-11 rounded-xl bg-card pl-9"
           />
         </div>
@@ -1169,7 +1312,7 @@ function WordLibrary({
             没有找到符合条件的单词
           </div>
         ) : (
-          filtered.map((word, index) => {
+          visibleWords.map((word, index) => {
             const status = wordStatus(reviews[word.id]);
             return (
               <article
@@ -1197,7 +1340,7 @@ function WordLibrary({
                     <span className="mr-2 text-muted-foreground">{word.partOfSpeech}</span>
                     {word.meaning}
                   </p>
-                  <p className="mt-1.5 text-xs text-muted-foreground">{word.collocation}</p>
+                  <p className="mt-1.5 line-clamp-1 text-xs text-muted-foreground">{word.examples[0]?.english}</p>
                 </div>
                 <div className="flex items-center justify-between gap-2 sm:justify-end">
                   <Badge
@@ -1225,6 +1368,17 @@ function WordLibrary({
           })
         )}
       </div>
+      {visibleCount < filtered.length && (
+        <div className="mt-4 text-center">
+          <Button
+            variant="outline"
+            className="rounded-full px-5"
+            onClick={() => setVisibleState({ key: visibleKey, count: visibleCount + 80 })}
+          >
+            继续显示 · 还有 {filtered.length - visibleCount} 词
+          </Button>
+        </div>
+      )}
     </>
   );
 }
@@ -1292,7 +1446,7 @@ function MistakeBook({
                 </p>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
                   <span>错误 {record?.wrong ?? 1} 次</span>
-                  <span>{word.collocation}</span>
+                  <span className="max-w-[65%] truncate">{word.examples[0]?.english}</span>
                 </div>
               </article>
             );
@@ -1407,6 +1561,7 @@ function ProgressView({
 
 function ReviewSession({
   word,
+  example,
   phase,
   retry,
   sessionMode,
@@ -1423,6 +1578,7 @@ function ReviewSession({
   onExit,
 }: {
   word: Word;
+  example: SentenceExample;
   phase: LearningPhase;
   retry: boolean;
   sessionMode: SessionMode;
@@ -1451,7 +1607,7 @@ function ReviewSession({
           : retry
             ? '刚才没记牢，再从句子里想一次'
             : '结合整句，回忆加粗词的含义';
-  const sentenceParts = word.example.split(new RegExp(`(${word.word})`, 'i'));
+  const sentenceParts = example.english.split(new RegExp(`(${word.word})`, 'i'));
 
   useEffect(() => {
     if (!isListening || done) return;
@@ -1560,9 +1716,10 @@ function ReviewSession({
 
               {phase === 'study' && (
                 <div className="mt-10 rounded-2xl bg-muted/65 p-5">
-                  <p className="text-sm leading-7 text-foreground">{word.example}</p>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    句中 <strong className="font-semibold text-foreground">{word.word}</strong> 表示“{word.meaning}”，常见搭配：{word.collocation}。
+                  <p className="text-sm leading-7 text-foreground">{example.english}</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{example.chinese}</p>
+                  <p className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
+                    先把整句看懂，再把 <strong className="font-semibold text-foreground">{word.word}</strong> 和“{word.meaning}”连起来。
                   </p>
                 </div>
               )}
@@ -1577,7 +1734,7 @@ function ReviewSession({
                 phase !== 'study' && (
                   <div className="mt-10 border-t border-border pt-7">
                     <p className="text-lg"><span className="mr-2 text-sm text-muted-foreground">{word.partOfSpeech}</span>{word.meaning}</p>
-                    <p className="mt-3 text-sm text-muted-foreground">这句话里的常见搭配是 <strong className="font-medium text-foreground">{word.collocation}</strong>。</p>
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">{example.chinese}</p>
                   </div>
                 )
               )}
@@ -1657,6 +1814,9 @@ function Onboarding({
             </h1>
             <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground">
               填考试日期和高考英语成绩，用来估算起点和每天的新词量。进入学习后，每组五个词，先听句子，再结合语境记。
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              四级范围 {WORD_COUNTS.cet4.toLocaleString()} 词；六级备考同时回收四级基础，共 {WORD_COUNTS.cet6Total.toLocaleString()} 个不重复词条。
             </p>
             <div className="mt-8 max-w-sm rounded-2xl border border-border bg-card p-5">
               <p className="text-sm text-muted-foreground">当前建议</p>
@@ -1753,7 +1913,7 @@ function SettingsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl">学习设置</DialogTitle>
           <DialogDescription>设置会自动保存在当前浏览器。</DialogDescription>
@@ -1825,6 +1985,14 @@ function SettingsDialog({
                 <Upload data-icon="inline-start" />
                 导入记录
               </Button>
+            </div>
+          </div>
+          <div className="border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
+            <p>词表与双语例句来自 OpenEtymology，学习顺序参考开放词频数据；单词按钮优先播放开放词典音频，不可用时改用设备朗读。</p>
+            <div className="mt-2 flex flex-wrap gap-x-3">
+              <a className="underline underline-offset-2 hover:text-foreground" href="https://github.com/openetymology/OpenEtymology" target="_blank" rel="noreferrer">内容来源</a>
+              <a className="underline underline-offset-2 hover:text-foreground" href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>
+              <a className="underline underline-offset-2 hover:text-foreground" href="https://dictionaryapi.dev/" target="_blank" rel="noreferrer">发音来源</a>
             </div>
           </div>
           <button className="text-sm text-destructive hover:underline" onClick={onReset}>
