@@ -1,6 +1,20 @@
-// A planning estimate, not an announced exam date. The UI exposes sessions only.
+const CONFIRMED_EXAMS: Record<string, { date: string; source: string }> = {
+  '2026-06': { date: '2026-06-13', source: 'https://cet.neea.edu.cn/' },
+  '2026-12': { date: '2026-12-12', source: 'https://cet.neea.cn/xhtml1/report/2609/1-1.htm' },
+};
+
+export function examSchedule(session: string) {
+  const normalized = normalizeExamSession(session);
+  const confirmed = CONFIRMED_EXAMS[normalized];
+  return {
+    date: confirmed?.date ?? `${normalized}-15`,
+    confirmed: Boolean(confirmed),
+    source: confirmed?.source ?? 'https://cet.neea.edu.cn/',
+  };
+}
+
 export function examPlanningDate(session: string) {
-  return `${normalizeExamSession(session)}-15`;
+  return examSchedule(session).date;
 }
 
 export function nextExamSession(now = new Date()) {

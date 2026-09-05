@@ -38,7 +38,7 @@ test('legacy dates become June/December sessions and invalid backups fall back s
   assert.equal(normalizeExamSession('2026-12-13'), '2026-12');
   assert.equal(normalizeExamSession('2027-04-20'), '2027-06');
   assert.equal(normalizeExamSession(null, new Date(2026, 8, 5)), '2026-12');
-  assert.equal(examPlanningDate('2026-12-13'), '2026-12-15');
+  assert.equal(examPlanningDate('2026-12-13'), '2026-12-12');
   assert.equal(nextExamSession(new Date(2026, 11, 31)), '2026-12');
   assert.equal(nextExamSession(new Date(2027, 0, 1)), '2027-06');
 });

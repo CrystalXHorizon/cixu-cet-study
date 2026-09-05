@@ -42,7 +42,11 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { ExamSessionSelect } from '@/components/exam-session-select';
 import { SentencePicker } from '@/components/sentence-picker';
-import { examPlanningDate, nextExamSession, normalizeExamSession } from '@/lib/exam-session';
+import { ListeningPractice } from '@/components/listening-practice';
+import { examPlanningDate, examSchedule, examSessionLabel, nextExamSession, normalizeExamSession } from '@/lib/exam-session';
+import { greeting, normalizeNickname, progressPercent, restoreListeningHistory, type ListeningDay } from '@/lib/study-dashboard';
+import { DEFAULT_AUDIO, restoreAudioPreferences, speechPlayer, type AudioPreferences } from '@/lib/speech-player';
+import { buildListeningQueue, type ListeningItem } from '@/lib/listening-queue';
 import { normalizeToken, restoreSentenceMarks, saveSentenceMarks, sentenceMarkKey, type ReviewRecord, type SentenceMark } from '@/lib/sentence-words';
 import { cn } from '@/lib/utils';
 import {
@@ -53,7 +57,7 @@ import {
   type WordLevel,
 } from '@/lib/words';
 
-type View = 'today' | 'words' | 'mistakes' | 'progress' | 'review';
+type View = 'today' | 'words' | 'mistakes' | 'progress' | 'review' | 'listening';
 type WordFilter = 'all' | 'new' | 'learning' | 'mastered';
 type SessionMode = 'new' | 'review' | 'mistakes';
 type LearningPhase = 'listen' | 'study' | 'recall' | 'review-listen' | 'review-context';
@@ -74,6 +78,9 @@ type DayRecord = {
 type StudyState = {
   version: 2;
   initialized: boolean;
+  nickname: string;
+  audio: AudioPreferences;
+  listeningHistory: Record<string, ListeningDay>;
   level: WordLevel;
   examDate: string;
   gaokaoScore: number;
@@ -117,6 +124,9 @@ const STORAGE_KEY = 'cixu-study-state-v2';
 const EMPTY_STATE: StudyState = {
   version: 2,
   initialized: false,
+  nickname: '',
+  audio: DEFAULT_AUDIO,
+  listeningHistory: {},
   level: 'cet6',
   examDate: nextExamSession(),
   gaokaoScore: 100,
@@ -202,51 +212,12 @@ function levelLabel(level: WordLevel) {
   return level === 'cet4' ? '四级词汇' : '六级词汇';
 }
 
-function speakWord(word: string) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(word);
-  utterance.lang = 'en-US';
-  utterance.rate = 0.82;
-  window.speechSynthesis.speak(utterance);
-}
-
-const pronunciationCache = new Map<string, string>();
-
-async function playWordPronunciation(word: string) {
-  const key = word.toLocaleLowerCase('en-US');
-  try {
-    let audioUrl = pronunciationCache.get(key);
-    if (!audioUrl) {
-      const response = await fetch(
-        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
-      );
-      if (!response.ok) throw new Error('pronunciation unavailable');
-      const entries = (await response.json()) as Array<{
-        phonetics?: Array<{ audio?: string }>;
-      }>;
-      const rawUrl = entries
-        .flatMap((entry) => entry.phonetics ?? [])
-        .map((phonetic) => phonetic.audio)
-        .find(Boolean);
-      if (!rawUrl) throw new Error('pronunciation unavailable');
-      audioUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
-      pronunciationCache.set(key, audioUrl);
-    }
-    const audio = new Audio(audioUrl);
-    await audio.play();
-  } catch {
-    speakWord(word);
-  }
+function playWordPronunciation(word: string) {
+  return speechPlayer.playWord(word);
 }
 
 function speakSentence(sentence: string) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(sentence);
-  utterance.lang = 'en-US';
-  utterance.rate = 0.76;
-  window.speechSynthesis.speak(utterance);
+  void speechPlayer.play(sentence);
 }
 
 function updateStreak(state: StudyState) {
@@ -270,6 +241,8 @@ export function VocabApp() {
   const [search, setSearch] = useState('');
   const [wordFilter, setWordFilter] = useState<WordFilter>('all');
   const [setupLevel, setSetupLevel] = useState<WordLevel>('cet6');
+  const [setupNickname, setSetupNickname] = useState('');
+  const [listeningItems, setListeningItems] = useState<ListeningItem[]>([]);
   const [setupExamDate, setSetupExamDate] = useState(EMPTY_STATE.examDate);
   const [setupScore, setSetupScore] = useState(100);
   const [setupFullScore, setSetupFullScore] = useState(150);
@@ -293,7 +266,7 @@ export function VocabApp() {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as StudyState;
-        if (parsed.version === 2) setStudy({ ...parsed, examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
+        if (parsed.version === 2) setStudy({ ...parsed, nickname: normalizeNickname(parsed.nickname), audio: restoreAudioPreferences(parsed.audio), listeningHistory: restoreListeningHistory(parsed.listeningHistory), examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
       } else {
         const legacy = window.localStorage.getItem('cixu-study-state-v1');
         if (legacy) {
@@ -305,6 +278,9 @@ export function VocabApp() {
             gaokaoScore: EMPTY_STATE.gaokaoScore,
             gaokaoFullScore: EMPTY_STATE.gaokaoFullScore,
             sentenceMarks: [],
+            nickname: '',
+            audio: DEFAULT_AUDIO,
+            listeningHistory: {},
           });
         }
       }
@@ -321,6 +297,9 @@ export function VocabApp() {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(study));
     }
   }, [ready, study]);
+
+  useEffect(() => { speechPlayer.preferences = study.audio; }, [study.audio]);
+  useEffect(() => () => speechPlayer.stop(), [view]);
 
   useEffect(() => {
     wordsRef.current = activeWords;
@@ -547,12 +526,36 @@ export function VocabApp() {
     setStudy({
       ...EMPTY_STATE,
       initialized: true,
+      nickname: normalizeNickname(setupNickname),
       level: setupLevel,
       examDate: setupExamDate,
       gaokaoScore: Math.max(0, setupScore),
       gaokaoFullScore: Math.max(1, setupFullScore),
     });
     setView('today');
+  }
+
+  function startListening() {
+    const items = buildListeningQueue(activeWords, study.reviews, study.mistakes, study.sentenceMarks, dayKey());
+    if (!items.length) { setNotice('暂时没有可用例句'); return; }
+    speechPlayer.stop();
+    setListeningItems(items);
+    setView('listening');
+  }
+
+  function recordListening(understood: boolean) {
+    setStudy((current) => {
+      const date = dayKey();
+      const previous = current.listeningHistory[date] ?? { completed: 0, understood: 0 };
+      return {
+        ...current,
+        ...updateStreak(current),
+        listeningHistory: {
+          ...current.listeningHistory,
+          [date]: { completed: previous.completed + 1, understood: previous.understood + (understood ? 1 : 0) },
+        },
+      };
+    });
   }
 
   function recordGrade(word: Word, grade: 0 | 1 | 2) {
@@ -702,7 +705,7 @@ export function VocabApp() {
         if (parsed.version !== 2 || !parsed.reviews || !parsed.history) {
           throw new Error('invalid');
         }
-        setStudy({ ...parsed, examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
+        setStudy({ ...parsed, nickname: normalizeNickname(parsed.nickname), audio: restoreAudioPreferences(parsed.audio), listeningHistory: restoreListeningHistory(parsed.listeningHistory), examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
         setSettingsOpen(false);
         setNotice('学习记录已经恢复');
       } catch {
@@ -717,6 +720,7 @@ export function VocabApp() {
     if (!window.confirm('确定清空当前设备上的全部学习记录吗？')) return;
     setStudy(EMPTY_STATE);
     setSetupLevel('cet6');
+    setSetupNickname('');
     setSetupExamDate(EMPTY_STATE.examDate);
     setSetupScore(100);
     setSetupFullScore(150);
@@ -737,6 +741,8 @@ export function VocabApp() {
   if (!study.initialized) {
     return (
       <Onboarding
+        nickname={setupNickname}
+        onNicknameChange={setSetupNickname}
         level={setupLevel}
         examDate={setupExamDate}
         score={setupScore}
@@ -783,6 +789,19 @@ export function VocabApp() {
   const currentItem = sessionItems[sessionIndex];
   const currentWord = wordMap.get(currentItem?.wordId);
   const currentExample = currentWord?.examples[currentItem?.exampleIndex ?? 0] ?? currentWord?.examples[0];
+
+  if (view === 'listening') {
+    return <ListeningPractice
+      items={listeningItems}
+      preferences={study.audio}
+      onPreferences={(audio) => setStudy((current) => ({ ...current, audio }))}
+      dictionary={sentenceDictionary}
+      marks={study.sentenceMarks}
+      onMarks={(example, marks) => setStudy((current) => saveSentenceMarks(current, example, marks, dayKey()))}
+      onComplete={recordListening}
+      onExit={() => setView('today')}
+    />;
+  }
 
   if (view === 'review' && currentWord && currentItem && currentExample) {
     return (
@@ -844,6 +863,7 @@ export function VocabApp() {
               onStartReview={() => startSession('review')}
               onMistakes={() => startSession('mistakes')}
               onExamDateChange={(examDate) => setStudy((current) => ({ ...current, examDate }))}
+              onStartListening={startListening}
             />
           )}
           {view === 'words' && (
@@ -1045,6 +1065,7 @@ function TodayView({
   plan,
   onStartNew,
   onStartReview,
+  onStartListening,
   onMistakes,
   onExamDateChange,
 }: {
@@ -1060,6 +1081,7 @@ function TodayView({
   plan: ReturnType<typeof studyPlan>;
   onStartNew(): void;
   onStartReview(): void;
+  onStartListening: () => void;
   onMistakes(): void;
   onExamDateChange: (session: string) => void;
 }) {
@@ -1070,12 +1092,21 @@ function TodayView({
   const newBatchCount = Math.min(5, newCount);
   const groups = Math.max(1, Math.ceil(plan.dailyNew / 5));
   const primaryIsReview = dueCount > 0;
+  const [examDialogOpen, setExamDialogOpen] = useState(false);
+  const [draftSession, setDraftSession] = useState(study.examDate);
+  const schedule = examSchedule(study.examDate);
+  const learned = todayRecord.learned ?? 0;
+  const newTarget = Math.min(plan.dailyNew, newCount + learned);
+  const weakWords = activeWords.filter((word) => study.mistakes.includes(word.id) || study.reviews[word.id]?.wrong > 0);
+  const weakRemaining = weakWords.filter((word) => study.mistakes.includes(word.id)).length;
+  const weakRecovered = weakWords.length - weakRemaining;
 
   return (
     <>
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="mb-2 text-sm text-muted-foreground">
+            <span className="mr-3 text-foreground">{greeting(study.nickname)}</span>
             {new Intl.DateTimeFormat('zh-CN', {
               month: 'long',
               day: 'numeric',
@@ -1086,9 +1117,10 @@ function TodayView({
             {primaryIsReview ? '先把该复习的记牢。' : '今天从五个新词开始。'}
           </h1>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {levelLabel(study.level)} · {plan.phase} · 距目标场次约 {plan.daysLeft} 天
-        </p>
+        <div className="text-sm leading-6 text-muted-foreground sm:text-right">
+          <p>{schedule.confirmed ? `本次${study.level === 'cet4' ? '四级' : '六级'}笔试：${formatExamDate(schedule.date)}` : `${examSessionLabel(study.examDate)}场次 · 日期待公布`}</p>
+          <p className="text-xs">{plan.phase} · 距目标{schedule.confirmed ? '考试' : '场次约'} {plan.daysLeft} 天</p>
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.85fr)]">
@@ -1133,17 +1165,17 @@ function TodayView({
               <p className="text-sm text-muted-foreground">备考节奏</p>
               <p className="mt-1 text-2xl font-semibold tracking-tight">{plan.phase}</p>
             </div>
-            <label htmlFor="today-exam-session" className="grid size-10 cursor-pointer place-items-center rounded-full bg-secondary text-primary" title="修改考试场次">
+            <Button size="icon" variant="ghost" className="size-10 rounded-full bg-secondary text-primary hover:bg-secondary/70" aria-label="修改考试场次" title="修改考试场次" onClick={() => { setDraftSession(study.examDate); setExamDialogOpen(true); }}>
               <CalendarDays className="size-5" />
-            </label>
+            </Button>
           </div>
           <div className="rounded-xl bg-secondary/45 p-4">
-            <label htmlFor="today-exam-session" className="mb-2 block text-sm text-muted-foreground">目标考试场次 · 可修改</label>
-            <ExamSessionSelect id="today-exam-session" value={study.examDate} onChange={onExamDateChange} />
+            <p className="text-sm text-muted-foreground">目标考试场次</p>
+            <p className="mt-2 font-medium">{examSessionLabel(study.examDate)}</p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               每天建议新学 <strong className="font-semibold text-foreground">{plan.dailyNew} 个</strong>，分 {groups} 组；考前预留 {plan.consolidationDays} 天只做回收与真题语境。
             </p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
+            <ExamScheduleNote session={study.examDate} />
           </div>
           <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground">
             <span>今日总进度</span>
@@ -1181,9 +1213,9 @@ function TodayView({
               <p className="text-sm text-muted-foreground">新词背诵</p>
               <p className="mt-2 text-2xl font-semibold tracking-tight">{plan.dailyNew} 个</p>
             </div>
-            <span className="grid size-9 place-items-center rounded-full bg-secondary text-primary">
+            <Button size="icon" variant="ghost" className="size-9 rounded-full bg-secondary text-primary hover:bg-secondary/70" aria-label="进入听力专项训练" title="进入听力专项训练" onClick={onStartListening}>
               <Headphones className="size-4" />
-            </span>
+            </Button>
           </div>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
             每组 5 个：先听句子，再理解词义，最后换一句话主动回忆。
@@ -1201,6 +1233,8 @@ function TodayView({
             {todayRecord.learned ?? 0}{' '}
             <span className="text-sm font-normal text-muted-foreground">个词</span>
           </p>
+          <Progress aria-label="今日新词完成进度" value={progressPercent(learned, newTarget)} className="mt-4 [&_[data-slot=progress-track]]:h-1.5" />
+          <p className="mt-2 text-xs text-muted-foreground">今日目标 {learned} / {newTarget} 词</p>
         </article>
         <button
           className="group rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:bg-secondary/45"
@@ -1211,26 +1245,56 @@ function TodayView({
             <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
-            {study.mistakes.length}{' '}
+            {weakRemaining}{' '}
             <span className="text-sm font-normal text-muted-foreground">个词</span>
           </p>
+          <Progress aria-label="薄弱词巩固进度" value={progressPercent(weakRecovered, weakWords.length)} className="mt-4 [&_[data-slot=progress-track]]:h-1.5" />
+          <p className="mt-2 text-xs text-muted-foreground">{weakWords.length ? `已巩固 ${weakRecovered} / ${weakWords.length} 个薄弱词` : '暂无待巩固词'}</p>
         </button>
         <article className="rounded-2xl border border-border bg-card p-5">
           <p className="text-sm text-muted-foreground">词库进度</p>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
-            {Math.round((masteredCount / activeWords.length) * 100)}%{' '}
+            {Math.round(progressPercent(masteredCount, activeWords.length))}%{' '}
             <span className="text-sm font-normal text-muted-foreground">已稳定 {masteredCount}</span>
           </p>
+          <Progress aria-label="词库掌握进度" value={progressPercent(masteredCount, activeWords.length)} className="mt-4 [&_[data-slot=progress-track]]:h-1.5" />
+          <p className="mt-2 text-xs text-muted-foreground">已稳定 {masteredCount} / {activeWords.length} 词</p>
         </article>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-5 text-xs text-muted-foreground">
         <span>今日回忆正确率 {correctRate || '—'}{correctRate ? '%' : ''}</span>
         <span>正在学习 {learningCount} 个</span>
+        <span>今日精听 {study.listeningHistory[dayKey()]?.completed ?? 0} 句</span>
         <span>记录仅保存在当前浏览器</span>
       </div>
+      <Dialog open={examDialogOpen} onOpenChange={setExamDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改考试场次</DialogTitle>
+            <DialogDescription>保存后重新安排每日背词量，已有学习记录不会改变。</DialogDescription>
+          </DialogHeader>
+          <label htmlFor="today-exam-session" className="text-sm font-medium">目标场次</label>
+          <ExamSessionSelect id="today-exam-session" value={draftSession} onChange={setDraftSession} />
+          <ExamScheduleNote session={draftSession} />
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setExamDialogOpen(false)}>取消</Button>
+            <Button onClick={() => { onExamDateChange(draftSession); setExamDialogOpen(false); }}>保存场次</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+function formatExamDate(date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  return `${year} 年 ${month} 月 ${day} 日`;
+}
+
+function ExamScheduleNote({ session }: { session: string }) {
+  const schedule = examSchedule(session);
+  return <p className="mt-2 text-xs leading-5 text-muted-foreground">{schedule.confirmed ? <>笔试日期：{formatExamDate(schedule.date)}。<a href={schedule.source} target="_blank" rel="noreferrer" className="ml-1 underline underline-offset-4 hover:text-primary">官方通知</a></> : '具体考试日期待公布；背词计划暂按所选月份中旬估算。'}</p>;
 }
 
 function WordLibrary({
@@ -1653,6 +1717,7 @@ function ReviewSession({
     const timeout = window.setTimeout(() => speakSentence(example.english), 260);
     return () => window.clearTimeout(timeout);
   }, [done, isListening, word.id, example.english]);
+  useEffect(() => () => speechPlayer.stop(), [word.id, phase, example.english, done]);
 
   if (done) {
     const rate = stats.reviewed
@@ -1797,6 +1862,8 @@ function ReviewSession({
 }
 
 function Onboarding({
+  nickname,
+  onNicknameChange,
   level,
   examDate,
   score,
@@ -1807,6 +1874,8 @@ function Onboarding({
   onFullScoreChange,
   onComplete,
 }: {
+  nickname: string;
+  onNicknameChange: (name: string) => void;
   level: WordLevel;
   examDate: string;
   score: number;
@@ -1853,13 +1922,17 @@ function Onboarding({
               <div className="mt-3 flex items-end justify-between gap-4">
                 <div>
                   <p className="font-heading text-3xl font-semibold">每天 {preview.dailyNew} 个</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{preview.phase} · 距目标场次约 {preview.daysLeft} 天</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{preview.phase} · 距目标{examSchedule(examDate).confirmed ? '考试' : '场次约'} {preview.daysLeft} 天</p>
                 </div>
                 <Headphones className="mb-1 size-6 text-primary" />
               </div>
             </div>
           </div>
           <div className="rounded-[22px] border border-border bg-card p-6 sm:p-7">
+            <div className="mb-6">
+              <label htmlFor="setup-nickname" className="mb-2 block text-sm font-medium">怎么称呼你？<span className="ml-2 font-normal text-muted-foreground">选填</span></label>
+              <Input id="setup-nickname" autoComplete="nickname" maxLength={24} value={nickname} onChange={(event) => onNicknameChange(event.target.value)} placeholder="一个你喜欢的称呼" className="h-10" />
+            </div>
             <div>
               <p className="text-sm font-medium">准备哪一场考试？</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1881,7 +1954,7 @@ function Onboarding({
             <div className="mt-7">
               <label className="mb-3 block text-sm font-medium" htmlFor="exam-session">目标考试场次</label>
               <ExamSessionSelect id="exam-session" value={examDate} onChange={onExamDateChange} />
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
+              <ExamScheduleNote session={examDate} />
             </div>
             <div className="mt-7">
               <p className="text-sm font-medium">高考英语成绩</p>
@@ -1944,6 +2017,10 @@ function SettingsDialog({
         </DialogHeader>
         <div className="space-y-6 py-2">
           <div>
+            <label htmlFor="settings-nickname" className="mb-2 block text-sm font-medium">称呼</label>
+            <Input id="settings-nickname" autoComplete="nickname" maxLength={24} value={study.nickname} onChange={(event) => onStudyChange((current) => ({ ...current, nickname: event.target.value }))} onBlur={() => onStudyChange((current) => ({ ...current, nickname: normalizeNickname(current.nickname) }))} placeholder="一个你喜欢的称呼" />
+          </div>
+          <div>
             <p className="mb-2 text-sm font-medium">当前词库</p>
             <div className="grid grid-cols-2 gap-2">
               {(['cet4', 'cet6'] as WordLevel[]).map((level) => (
@@ -1964,7 +2041,7 @@ function SettingsDialog({
           <div>
             <label className="mb-2 block text-sm font-medium" htmlFor="settings-exam-session">目标考试场次</label>
             <ExamSessionSelect id="settings-exam-session" value={study.examDate} onChange={(examDate) => onStudyChange((current) => ({ ...current, examDate }))} />
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
+            <ExamScheduleNote session={study.examDate} />
           </div>
           <div>
             <p className="mb-2 text-sm font-medium">高考英语成绩</p>
