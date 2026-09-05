@@ -40,6 +40,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { ExamSessionSelect } from '@/components/exam-session-select';
+import { SentencePicker } from '@/components/sentence-picker';
+import { examPlanningDate, nextExamSession, normalizeExamSession } from '@/lib/exam-session';
+import { normalizeToken, restoreSentenceMarks, saveSentenceMarks, sentenceMarkKey, type ReviewRecord, type SentenceMark } from '@/lib/sentence-words';
 import { cn } from '@/lib/utils';
 import {
   loadWords,
@@ -61,15 +65,6 @@ type SessionItem = {
   retry?: boolean;
 };
 
-type ReviewRecord = {
-  interval: number;
-  due: string;
-  correct: number;
-  wrong: number;
-  correctStreak: number;
-  lastReviewed: string;
-};
-
 type DayRecord = {
   reviewed: number;
   correct: number;
@@ -86,6 +81,7 @@ type StudyState = {
   reviews: Record<string, ReviewRecord>;
   mistakes: string[];
   saved: string[];
+  sentenceMarks: SentenceMark[];
   history: Record<string, DayRecord>;
   streak: number;
   lastStudyDate?: string;
@@ -118,22 +114,17 @@ declare global {
 
 const STORAGE_KEY = 'cixu-study-state-v2';
 
-function dateAfterToday(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return dayKey(date);
-}
-
 const EMPTY_STATE: StudyState = {
   version: 2,
   initialized: false,
   level: 'cet6',
-  examDate: dateAfterToday(100),
+  examDate: nextExamSession(),
   gaokaoScore: 100,
   gaokaoFullScore: 150,
   reviews: {},
   mistakes: [],
   saved: [],
+  sentenceMarks: [],
   history: {},
   streak: 0,
 };
@@ -171,7 +162,7 @@ function studyPlan(
   totalWords: number = state.level === 'cet4' ? WORD_COUNTS.cet4 : WORD_COUNTS.cet6Total,
   remainingWords: number = totalWords,
 ) {
-  const daysLeft = daysUntil(state.examDate);
+  const daysLeft = daysUntil(examPlanningDate(state.examDate));
   const scoreRate = state.gaokaoFullScore > 0 ? state.gaokaoScore / state.gaokaoFullScore : 0.67;
   const foundationFactor = scoreRate < 0.55 ? 0.78 : scoreRate < 0.7 ? 0.68 : scoreRate < 0.83 ? 0.56 : 0.44;
   const estimatedGap = Math.min(remainingWords, Math.round(totalWords * foundationFactor));
@@ -302,7 +293,7 @@ export function VocabApp() {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as StudyState;
-        if (parsed.version === 2) setStudy(parsed);
+        if (parsed.version === 2) setStudy({ ...parsed, examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
       } else {
         const legacy = window.localStorage.getItem('cixu-study-state-v1');
         if (legacy) {
@@ -313,6 +304,7 @@ export function VocabApp() {
             examDate: EMPTY_STATE.examDate,
             gaokaoScore: EMPTY_STATE.gaokaoScore,
             gaokaoFullScore: EMPTY_STATE.gaokaoFullScore,
+            sentenceMarks: [],
           });
         }
       }
@@ -361,6 +353,10 @@ export function VocabApp() {
 
   const wordMap = useMemo(
     () => new Map(activeWords.map((item) => [item.id, item])),
+    [activeWords],
+  );
+  const sentenceDictionary = useMemo(
+    () => new Map(activeWords.map((word) => [normalizeToken(word.word), word])),
     [activeWords],
   );
   const today = dayKey();
@@ -604,7 +600,7 @@ export function VocabApp() {
           [today]: {
             reviewed: history.reviewed + 1,
             correct: history.correct + (grade === 2 ? 1 : 0),
-            learned: (history.learned ?? 0) + (previous ? 0 : 1),
+            learned: (history.learned ?? 0) + (previous?.lastReviewed ? 0 : 1),
           },
         },
       };
@@ -655,7 +651,8 @@ export function VocabApp() {
     if (view !== 'review' || sessionDone) return;
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
-      if (target.tagName === 'INPUT') return;
+      if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey
+        || target.closest('input, textarea, select, button, a, [contenteditable="true"], [role="dialog"], [role="combobox"]')) return;
       const item = sessionItems[sessionIndex];
       const word = wordMap.get(item?.wordId);
       if (!word) return;
@@ -705,7 +702,7 @@ export function VocabApp() {
         if (parsed.version !== 2 || !parsed.reviews || !parsed.history) {
           throw new Error('invalid');
         }
-        setStudy(parsed);
+        setStudy({ ...parsed, examDate: normalizeExamSession(parsed.examDate), sentenceMarks: restoreSentenceMarks(parsed.sentenceMarks) });
         setSettingsOpen(false);
         setNotice('学习记录已经恢复');
       } catch {
@@ -790,6 +787,7 @@ export function VocabApp() {
   if (view === 'review' && currentWord && currentItem && currentExample) {
     return (
       <ReviewSession
+        key={`${sessionMode}-${sessionIndex}`}
         word={currentWord}
         example={currentExample}
         phase={currentItem.phase}
@@ -806,6 +804,9 @@ export function VocabApp() {
         onSpeak={() => void playWordPronunciation(currentWord.word)}
         onListen={() => speakSentence(currentExample.english)}
         onExit={() => setView('today')}
+        sentenceDictionary={sentenceDictionary}
+        sentenceMarks={study.sentenceMarks}
+        onSentenceMarks={(example, selected) => setStudy((current) => saveSentenceMarks(current, example, selected, dayKey()))}
       />
     );
   }
@@ -842,6 +843,7 @@ export function VocabApp() {
               onStartNew={() => startSession('new')}
               onStartReview={() => startSession('review')}
               onMistakes={() => startSession('mistakes')}
+              onExamDateChange={(examDate) => setStudy((current) => ({ ...current, examDate }))}
             />
           )}
           {view === 'words' && (
@@ -865,6 +867,12 @@ export function VocabApp() {
               reviews={study.reviews}
               onStart={() => startSession('mistakes')}
               onSpeak={(word) => void playWordPronunciation(word)}
+              sentenceMarks={study.sentenceMarks}
+              onRemoveMark={(mark) => setStudy((current) => saveSentenceMarks(
+                current, mark.example,
+                current.sentenceMarks.filter((item) => item.example.english === mark.example.english && sentenceMarkKey(item) !== sentenceMarkKey(mark)),
+                dayKey(),
+              ))}
             />
           )}
           {view === 'progress' && (
@@ -1038,6 +1046,7 @@ function TodayView({
   onStartNew,
   onStartReview,
   onMistakes,
+  onExamDateChange,
 }: {
   study: StudyState;
   activeWords: Word[];
@@ -1052,6 +1061,7 @@ function TodayView({
   onStartNew(): void;
   onStartReview(): void;
   onMistakes(): void;
+  onExamDateChange: (session: string) => void;
 }) {
   const correctRate =
     todayRecord.reviewed > 0
@@ -1077,7 +1087,7 @@ function TodayView({
           </h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          {levelLabel(study.level)} · {plan.phase} · 距考试 {plan.daysLeft} 天
+          {levelLabel(study.level)} · {plan.phase} · 距目标场次约 {plan.daysLeft} 天
         </p>
       </div>
 
@@ -1123,16 +1133,17 @@ function TodayView({
               <p className="text-sm text-muted-foreground">备考节奏</p>
               <p className="mt-1 text-2xl font-semibold tracking-tight">{plan.phase}</p>
             </div>
-            <span className="grid size-10 place-items-center rounded-full bg-secondary text-primary">
+            <label htmlFor="today-exam-session" className="grid size-10 cursor-pointer place-items-center rounded-full bg-secondary text-primary" title="修改考试场次">
               <CalendarDays className="size-5" />
-            </span>
+            </label>
           </div>
           <div className="rounded-xl bg-secondary/45 p-4">
-            <p className="text-xs text-muted-foreground">目标考试日</p>
-            <p className="mt-1 font-medium">{study.examDate.replaceAll('-', '.')}</p>
+            <label htmlFor="today-exam-session" className="mb-2 block text-sm text-muted-foreground">目标考试场次 · 可修改</label>
+            <ExamSessionSelect id="today-exam-session" value={study.examDate} onChange={onExamDateChange} />
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               每天建议新学 <strong className="font-semibold text-foreground">{plan.dailyNew} 个</strong>，分 {groups} 组；考前预留 {plan.consolidationDays} 天只做回收与真题语境。
             </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
           </div>
           <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground">
             <span>今日总进度</span>
@@ -1388,17 +1399,21 @@ function MistakeBook({
   reviews,
   onStart,
   onSpeak,
+  sentenceMarks,
+  onRemoveMark,
 }: {
   words: Word[];
   reviews: Record<string, ReviewRecord>;
   onStart(): void;
   onSpeak(word: string): void;
+  sentenceMarks: SentenceMark[];
+  onRemoveMark: (mark: SentenceMark) => void;
 }) {
   return (
     <>
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">答错后自动加入</p>
+          <p className="mb-2 text-sm text-muted-foreground">回看答错的词和句中标记</p>
           <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em]">
             错词本
           </h1>
@@ -1410,7 +1425,27 @@ function MistakeBook({
           </Button>
         )}
       </div>
-      {words.length === 0 ? (
+      {sentenceMarks.length > 0 && (
+        <section className="mb-7 rounded-[22px] border border-border bg-card p-5 sm:p-6" aria-label="句中标记">
+          <h2 className="text-lg font-semibold">句中标记 <span className="ml-1 text-sm font-normal text-muted-foreground">{sentenceMarks.length} 处</span></h2>
+          <div className="mt-2 divide-y divide-border">
+            {sentenceMarks.map((mark) => (
+              <article key={sentenceMarkKey(mark)} className="py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <button className="inline-flex items-center gap-2 rounded font-heading text-xl font-semibold text-primary" onClick={() => onSpeak(mark.token)} aria-label={`播放 ${mark.token}`}>
+                    {mark.token}<Volume2 className="size-4" />
+                  </button>
+                  <Button size="sm" variant="ghost" onClick={() => onRemoveMark(mark)} aria-label={`移除 ${mark.token} 的句中标记`}>移除标记</Button>
+                </div>
+                <p className="mt-2 text-base leading-7">{mark.example.english}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{mark.example.chinese}</p>
+                {!mark.wordId && <p className="mt-2 text-xs text-muted-foreground">词库暂未收录，可在这里听词、回看原句。</p>}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      {words.length === 0 && sentenceMarks.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-border bg-card/55 px-6 py-20 text-center">
           <span className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-secondary text-primary">
             <Check className="size-5" />
@@ -1445,7 +1480,7 @@ function MistakeBook({
                   {word.meaning}
                 </p>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
-                  <span>错误 {record?.wrong ?? 1} 次</span>
+                  <span>{record?.wrong ? `错误 ${record.wrong} 次` : '句中标记待复习'}</span>
                   <span className="max-w-[65%] truncate">{word.examples[0]?.english}</span>
                 </div>
               </article>
@@ -1576,6 +1611,9 @@ function ReviewSession({
   onSpeak,
   onListen,
   onExit,
+  sentenceDictionary,
+  sentenceMarks,
+  onSentenceMarks,
 }: {
   word: Word;
   example: SentenceExample;
@@ -1593,6 +1631,9 @@ function ReviewSession({
   onSpeak(): void;
   onListen(): void;
   onExit(): void;
+  sentenceDictionary: Map<string, Word>;
+  sentenceMarks: SentenceMark[];
+  onSentenceMarks: (example: SentenceExample, marks: SentenceMark[]) => void;
 }) {
   const progress = done ? 100 : Math.round((index / total) * 100);
   const isListening = phase === 'listen' || phase === 'review-listen';
@@ -1607,13 +1648,11 @@ function ReviewSession({
           : retry
             ? '刚才没记牢，再从句子里想一次'
             : '结合整句，回忆加粗词的含义';
-  const sentenceParts = example.english.split(new RegExp(`(${word.word})`, 'i'));
-
   useEffect(() => {
     if (!isListening || done) return;
-    const timeout = window.setTimeout(onListen, 260);
+    const timeout = window.setTimeout(() => speakSentence(example.english), 260);
     return () => window.clearTimeout(timeout);
-  }, [done, isListening, onListen, word.id]);
+  }, [done, isListening, word.id, example.english]);
 
   if (done) {
     const rate = stats.reviewed
@@ -1702,21 +1741,13 @@ function ReviewSession({
                     <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">IN CONTEXT</span>
                     <Button size="sm" variant="ghost" onClick={onListen}><Volume2 data-icon="inline-start" />听原句</Button>
                   </div>
-                  <p className="font-heading text-xl leading-9 sm:text-2xl sm:leading-10">
-                    {sentenceParts.map((part, partIndex) =>
-                      part.toLocaleLowerCase() === word.word.toLocaleLowerCase() ? (
-                        <mark key={partIndex} className="rounded bg-secondary px-1 text-primary">{part}</mark>
-                      ) : (
-                        <span key={partIndex}>{part}</span>
-                      ),
-                    )}
-                  </p>
+                  <SentencePicker example={example} word={word} dictionary={sentenceDictionary} marks={sentenceMarks} onSave={onSentenceMarks} onSpeak={(token) => void playWordPronunciation(token)} />
                 </div>
               )}
 
               {phase === 'study' && (
                 <div className="mt-10 rounded-2xl bg-muted/65 p-5">
-                  <p className="text-sm leading-7 text-foreground">{example.english}</p>
+                  <SentencePicker compact example={example} word={word} dictionary={sentenceDictionary} marks={sentenceMarks} onSave={onSentenceMarks} onSpeak={(token) => void playWordPronunciation(token)} />
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">{example.chinese}</p>
                   <p className="mt-4 border-t border-border pt-4 text-sm text-muted-foreground">
                     先把整句看懂，再把 <strong className="font-semibold text-foreground">{word.word}</strong> 和“{word.meaning}”连起来。
@@ -1728,7 +1759,6 @@ function ReviewSession({
                 <div className="mt-12 text-center">
                   <p className="text-sm text-muted-foreground">先结合整句话想一想，不必逐字翻译。</p>
                   <Button className="mt-5 rounded-full px-6" onClick={onReveal}>我想好了，查看句中含义</Button>
-                  <p className="mt-3 text-xs text-muted-foreground">空格键</p>
                 </div>
               ) : (
                 phase !== 'study' && (
@@ -1806,14 +1836,14 @@ function Onboarding({
       <section className="mx-auto mt-[clamp(2.5rem,8vh,5.5rem)] max-w-4xl">
         <div className="grid gap-10 lg:grid-cols-[1fr_0.95fr] lg:items-start">
           <div>
-            <Badge variant="outline" className="font-normal">按考试日期安排背词量</Badge>
+            <Badge variant="outline" className="font-normal">按考试场次安排背词量</Badge>
             <h1 className="mt-5 font-heading text-[clamp(2.8rem,7vw,4.7rem)] font-semibold leading-[1.06] tracking-[-0.055em]">
               少做测试，
               <br />
               直接开始背。
             </h1>
             <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground">
-              填考试日期和高考英语成绩，用来估算起点和每天的新词量。进入学习后，每组五个词，先听句子，再结合语境记。
+              选考试场次、填高考英语成绩，用来估算起点和每天的新词量。进入学习后，每组五个词，先听句子，再结合语境记。
             </p>
             <p className="mt-3 text-sm text-muted-foreground">
               四级范围 {WORD_COUNTS.cet4.toLocaleString()} 词；六级备考同时回收四级基础，共 {WORD_COUNTS.cet6Total.toLocaleString()} 个不重复词条。
@@ -1823,7 +1853,7 @@ function Onboarding({
               <div className="mt-3 flex items-end justify-between gap-4">
                 <div>
                   <p className="font-heading text-3xl font-semibold">每天 {preview.dailyNew} 个</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{preview.phase} · 距考试 {preview.daysLeft} 天</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{preview.phase} · 距目标场次约 {preview.daysLeft} 天</p>
                 </div>
                 <Headphones className="mb-1 size-6 text-primary" />
               </div>
@@ -1849,15 +1879,9 @@ function Onboarding({
               </div>
             </div>
             <div className="mt-7">
-              <label className="text-sm font-medium" htmlFor="exam-date">笔试日期</label>
-              <Input
-                id="exam-date"
-                type="date"
-                min={dateAfterToday(1)}
-                value={examDate}
-                onChange={(event) => onExamDateChange(event.target.value)}
-                className="mt-3 h-11"
-              />
+              <label className="mb-3 block text-sm font-medium" htmlFor="exam-session">目标考试场次</label>
+              <ExamSessionSelect id="exam-session" value={examDate} onChange={onExamDateChange} />
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
             </div>
             <div className="mt-7">
               <p className="text-sm font-medium">高考英语成绩</p>
@@ -1883,7 +1907,7 @@ function Onboarding({
                 />
               </div>
             </div>
-            <Button className="mt-8 h-11 w-full rounded-xl" onClick={onComplete} disabled={!examDate || preview.daysLeft < 1}>
+            <Button className="mt-8 h-11 w-full rounded-xl" onClick={onComplete} disabled={!examDate}>
               进入今日背诵
               <ArrowRight data-icon="inline-end" />
             </Button>
@@ -1938,15 +1962,9 @@ function SettingsDialog({
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium" htmlFor="settings-exam-date">笔试日期</label>
-            <Input
-              id="settings-exam-date"
-              type="date"
-              min={dateAfterToday(1)}
-              value={study.examDate}
-              onChange={(event) => onStudyChange((current) => ({ ...current, examDate: event.target.value }))}
-              className="h-10"
-            />
+            <label className="mb-2 block text-sm font-medium" htmlFor="settings-exam-session">目标考试场次</label>
+            <ExamSessionSelect id="settings-exam-session" value={study.examDate} onChange={(examDate) => onStudyChange((current) => ({ ...current, examDate }))} />
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">按所选月份中旬估算，具体日期以考试通知为准。</p>
           </div>
           <div>
             <p className="mb-2 text-sm font-medium">高考英语成绩</p>
