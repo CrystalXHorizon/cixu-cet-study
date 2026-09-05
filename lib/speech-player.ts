@@ -1,8 +1,11 @@
+import { cachedPronunciation, preparePronunciation } from './pronunciation.ts';
+
 export type AudioPreferences = { voiceURI: string; rate: number };
 export const DEFAULT_AUDIO: AudioPreferences = { voiceURI: '', rate: 0.95 };
 export type PlaybackState = {
   status: 'idle' | 'loading' | 'playing' | 'paused' | 'error';
   message: string;
+  retryable?: boolean;
 };
 
 export function restoreAudioPreferences(value: unknown): AudioPreferences {
@@ -58,12 +61,15 @@ export class SpeechPlayer {
   private state: PlaybackState = { status: 'idle', message: '' };
   private voiceCache: SpeechSynthesisVoice[] = [];
   private cancelVoiceWait: (() => void) | undefined;
+  private retryAction: (() => void) | undefined;
   constructor(
     private engine: () => SpeechSynthesis | undefined = () =>
       typeof window === 'undefined' ? undefined : window.speechSynthesis,
     private createUtterance: (text: string) => SpeechSynthesisUtterance = (
       text,
     ) => new SpeechSynthesisUtterance(text),
+    private createAudio: (url: string) => HTMLAudioElement = (url) =>
+      new Audio(url),
   ) {}
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -72,8 +78,12 @@ export class SpeechPlayer {
     };
   };
   getSnapshot = () => this.state;
-  private update(status: PlaybackState['status'], message = '') {
-    this.state = { status, message };
+  private update(
+    status: PlaybackState['status'],
+    message = '',
+    retryable = false,
+  ) {
+    this.state = { status, message, retryable };
     this.listeners.forEach((listener) => listener());
   }
   stop = () => {
@@ -82,11 +92,15 @@ export class SpeechPlayer {
     this.cancelVoiceWait?.();
     this.cancelVoiceWait = undefined;
     this.pending = undefined;
+    this.retryAction = undefined;
     this.audio?.pause();
     this.audio = undefined;
     this.engine()?.cancel();
     this.utterance = undefined;
     this.update('idle');
+  };
+  retry = () => {
+    this.retryAction?.();
   };
   async play(
     text: string,
@@ -131,10 +145,14 @@ export class SpeechPlayer {
       utterance.rate = restoreAudioPreferences(preferences).rate;
       utterance.pitch = 1;
       utterance.onstart = () => {
-        if (ticket === this.generation) this.update('playing');
+        if (ticket === this.generation) {
+          clearTimeout(this.timer);
+          this.update('playing');
+        }
       };
       utterance.onend = () => {
         if (ticket !== this.generation) return;
+        clearTimeout(this.timer);
         remaining--;
         if (remaining <= 0) {
           this.utterance = undefined;
@@ -155,12 +173,34 @@ export class SpeechPlayer {
           event.error === 'interrupted'
         )
           return;
-        this.update('error', '这次播放没有成功，请重播或切换英语音色。');
+        clearTimeout(this.timer);
+        this.retryAction = () => void this.play(text, preferences, repetitions);
+        this.update(
+          'error',
+          '朗读未能启动。请点重试；仍无声时请检查站点静音或切换英语音色。',
+          true,
+        );
       };
       this.utterance = utterance;
       engine.resume();
-      this.update('playing');
-      engine.speak(utterance);
+      this.update('loading', '正在启动英语语音…');
+      this.timer = setTimeout(() => {
+        if (ticket !== this.generation) return;
+        this.stop();
+        this.retryAction = () => void this.play(text, preferences, repetitions);
+        this.update(
+          'error',
+          '没有收到语音播放响应。请点重试，或换用已安装英语语音的浏览器。',
+          true,
+        );
+      }, 5000);
+      try {
+        engine.speak(utterance);
+      } catch {
+        clearTimeout(this.timer);
+        this.retryAction = () => void this.play(text, preferences, repetitions);
+        this.update('error', '浏览器未允许朗读，请点重试。', true);
+      }
     };
     next();
   }
@@ -183,36 +223,28 @@ export class SpeechPlayer {
   async playWord(
     word: string,
     preferences: AudioPreferences = this.preferences,
+    useFallback = false,
   ) {
     this.stop();
     const ticket = this.generation;
-    this.update('loading');
+    this.update('loading', `正在准备 ${word} 的发音…`);
     try {
-      let url = pronunciationCache.get(word.toLowerCase());
-      if (!url) {
-        const response = await fetch(
-          `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
-          { signal: AbortSignal.timeout(4000) },
-        );
-        if (!response.ok) throw new Error('No recording');
-        const entries = (await response.json()) as Array<{
-          phonetics?: Array<{ audio?: string }>;
-        }>;
-        url = entries
-          .flatMap((entry) => entry.phonetics ?? [])
-          .map((item) => item.audio)
-          .find(
-            (item) => item?.startsWith('https://') || item?.startsWith('//'),
-          );
-        if (!url) throw new Error('No recording');
-        if (url.startsWith('//')) url = `https:${url}`;
-        pronunciationCache.set(word.toLowerCase(), url);
-      }
+      // Cached recordings start within the click, retaining browser user activation.
+      const recording =
+        cachedPronunciation(word) ?? (await preparePronunciation(word));
       if (ticket !== this.generation) return;
-      const audio = new Audio(url);
+      const audio = this.createAudio(
+        useFallback ? (recording.fallbackUrl ?? recording.url) : recording.url,
+      );
       this.audio = audio;
+      audio.volume = 1;
+      audio.muted = false;
       const fallback = () => {
-        if (ticket === this.generation) void this.play(word, preferences);
+        if (ticket === this.generation) {
+          if (!useFallback && recording.fallbackUrl)
+            void this.playWord(word, preferences, true);
+          else void this.play(word, preferences);
+        }
       };
       audio.onended = () => {
         if (ticket === this.generation) {
@@ -221,19 +253,35 @@ export class SpeechPlayer {
         }
       };
       audio.onerror = fallback;
-      this.timer = setTimeout(fallback, 4000);
-      await audio.play();
+      this.timer = setTimeout(fallback, 8000);
+      try {
+        await audio.play();
+      } catch (error) {
+        if (ticket !== this.generation) return;
+        clearTimeout(this.timer);
+        if (error instanceof Error && error.name === 'NotAllowedError') {
+          this.retryAction = () =>
+            void this.playWord(word, preferences, useFallback);
+          this.update(
+            'error',
+            `${word} 的音频已就绪，请再点一次播放以允许浏览器出声。`,
+            true,
+          );
+          return;
+        }
+        fallback();
+        return;
+      }
       if (ticket !== this.generation) {
         audio.pause();
         return;
       }
       clearTimeout(this.timer);
-      this.update('playing');
+      this.update('playing', `正在播放 ${word}`);
     } catch {
       if (ticket === this.generation) void this.play(word, preferences);
     }
   }
 }
 
-const pronunciationCache = new Map<string, string>();
 export const speechPlayer = new SpeechPlayer();

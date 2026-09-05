@@ -13,3 +13,5 @@ Word ordering uses the English 2018 frequency list from [hermitdave/FrequencyWor
 ## Free Dictionary API
 
 Word-pronunciation buttons request available audio at runtime from the [Free Dictionary API](https://dictionaryapi.dev/). Audio files are not bundled with this project. Individual audio recordings can have their own source and license metadata; browser speech synthesis is used when an online recording is unavailable.
+
+When the response identifies a Wikimedia Commons source, the app resolves the same recording through the Commons API and prefers its original `upload.wikimedia.org` URL, retaining the Dictionary API URL as a fallback. This changes the delivery path, not the recording's authorship or license. Source links and license metadata are retained in the pronunciation cache. For example, the US stressed pronunciation of “you” is [En-us-you.ogg](https://commons.wikimedia.org/wiki/File:En-us-you.ogg), with the source license reported as CC BY-SA 3.0. These externally streamed recordings are not relicensed under this repository's MIT or CC BY-SA 4.0 grants.

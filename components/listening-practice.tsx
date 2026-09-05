@@ -394,6 +394,7 @@ export function ListeningPractice({
                         ? `当前音色：${chosenVoice?.name ?? voices[0].name}`
                         : '使用浏览器英语语音')}
           </output>
+          {playback.retryable && <Button variant="outline" className="mx-auto mt-2 flex" onClick={speechPlayer.retry}>重试播放</Button>}
           {stage < 2 ? (
             <Button
               className="mt-6 h-11 w-full rounded-full"

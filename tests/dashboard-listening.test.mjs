@@ -119,6 +119,7 @@ function fakePlayer(available = voices) {
     resume() {},
     speak(utterance) {
       utterances.push(utterance);
+      utterance.onstart?.();
     },
     addEventListener(_, fn) {
       listeners.add(fn);
