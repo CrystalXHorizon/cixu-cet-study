@@ -1,16 +1,17 @@
 'use client';
 
 import {
-  ArrowLeft,
   ArrowRight,
   BookOpen,
+  CalendarDays,
   Check,
   ChevronRight,
   CircleAlert,
   Download,
   Gauge,
+  Headphones,
   LayoutGrid,
-  ListChecks,
+  Play,
   RotateCcw,
   Search,
   Settings,
@@ -22,7 +23,6 @@ import {
 } from 'lucide-react';
 import {
   ChangeEvent,
-  FormEvent,
   useEffect,
   useMemo,
   useRef,
@@ -45,8 +45,14 @@ import { getWordsForLevel, WORDS, type Word, type WordLevel } from '@/lib/words'
 
 type View = 'today' | 'words' | 'mistakes' | 'progress' | 'review';
 type WordFilter = 'all' | 'new' | 'learning' | 'mastered';
-type SessionMode = 'daily' | 'mistakes';
-type QuestionMode = 'recognition' | 'spelling';
+type SessionMode = 'new' | 'review' | 'mistakes';
+type LearningPhase = 'listen' | 'study' | 'recall' | 'review-listen' | 'review-context';
+
+type SessionItem = {
+  wordId: string;
+  phase: LearningPhase;
+  retry?: boolean;
+};
 
 type ReviewRecord = {
   interval: number;
@@ -60,13 +66,16 @@ type ReviewRecord = {
 type DayRecord = {
   reviewed: number;
   correct: number;
+  learned?: number;
 };
 
 type StudyState = {
-  version: 1;
+  version: 2;
   initialized: boolean;
   level: WordLevel;
-  dailyGoal: number;
+  examDate: string;
+  gaokaoScore: number;
+  gaokaoFullScore: number;
   reviews: Record<string, ReviewRecord>;
   mistakes: string[];
   saved: string[];
@@ -84,7 +93,7 @@ type WebMCPTool = {
     readOnlyHint?: boolean;
     untrustedContentHint?: boolean;
   };
-  execute(input: unknown): unknown | Promise<unknown>;
+  execute(input: unknown): Record<string, unknown>;
 };
 
 type WebMCPContext = {
@@ -100,13 +109,21 @@ declare global {
   }
 }
 
-const STORAGE_KEY = 'cixu-study-state-v1';
+const STORAGE_KEY = 'cixu-study-state-v2';
+
+function dateAfterToday(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return dayKey(date);
+}
 
 const EMPTY_STATE: StudyState = {
-  version: 1,
+  version: 2,
   initialized: false,
   level: 'cet6',
-  dailyGoal: 20,
+  examDate: dateAfterToday(100),
+  gaokaoScore: 100,
+  gaokaoFullScore: 150,
   reviews: {},
   mistakes: [],
   saved: [],
@@ -135,9 +152,33 @@ function addDays(days: number) {
   return dayKey(date);
 }
 
+function daysUntil(dateKey: string) {
+  const target = new Date(`${dateKey}T12:00:00`);
+  const today = new Date(`${dayKey()}T12:00:00`);
+  if (!Number.isFinite(target.getTime())) return 0;
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86_400_000));
+}
+
+function studyPlan(state: Pick<StudyState, 'level' | 'examDate' | 'gaokaoScore' | 'gaokaoFullScore'>) {
+  const daysLeft = daysUntil(state.examDate);
+  const scoreRate = state.gaokaoFullScore > 0 ? state.gaokaoScore / state.gaokaoFullScore : 0.67;
+  const baseGap = state.level === 'cet4' ? 1800 : 2100;
+  const foundationFactor = scoreRate < 0.55 ? 1.15 : scoreRate < 0.7 ? 1 : scoreRate < 0.83 ? 0.86 : 0.72;
+  const estimatedGap = Math.round(baseGap * foundationFactor);
+  const consolidationDays = daysLeft >= 90 ? 21 : daysLeft >= 45 ? 14 : Math.max(5, Math.round(daysLeft * 0.25));
+  const learningDays = Math.max(1, daysLeft - consolidationDays);
+  const rawDaily = Math.ceil(estimatedGap / learningDays);
+  const phase =
+    daysLeft > 120 ? '基础期' : daysLeft > 60 ? '主攻期' : daysLeft > 30 ? '强化期' : daysLeft > 14 ? '冲刺期' : '回收期';
+  const cap = daysLeft > 60 ? 35 : daysLeft > 30 ? 30 : daysLeft > 14 ? 20 : 10;
+  const minimum = daysLeft > 14 ? 10 : 5;
+  const dailyNew = Math.max(minimum, Math.min(cap, Math.ceil(rawDaily / 5) * 5));
+  return { daysLeft, phase, dailyNew, estimatedGap, consolidationDays };
+}
+
 function wordStatus(record?: ReviewRecord): WordFilter {
   if (!record) return 'new';
-  if (record.interval >= 14 || record.correct >= 4) return 'mastered';
+  if (record.interval >= 21 && record.correctStreak >= 2) return 'mastered';
   return 'learning';
 }
 
@@ -151,6 +192,15 @@ function speakWord(word: string) {
   const utterance = new SpeechSynthesisUtterance(word);
   utterance.lang = 'en-US';
   utterance.rate = 0.82;
+  window.speechSynthesis.speak(utterance);
+}
+
+function speakSentence(sentence: string) {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(sentence);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.76;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -175,18 +225,13 @@ export function VocabApp() {
   const [search, setSearch] = useState('');
   const [wordFilter, setWordFilter] = useState<WordFilter>('all');
   const [setupLevel, setSetupLevel] = useState<WordLevel>('cet6');
-  const [setupGoal, setSetupGoal] = useState(20);
-  const [onboardingStep, setOnboardingStep] = useState<'setup' | 'quiz' | 'result'>(
-    'setup',
-  );
-  const [diagnosticIndex, setDiagnosticIndex] = useState(0);
-  const [diagnosticKnown, setDiagnosticKnown] = useState<string[]>([]);
-  const [sessionIds, setSessionIds] = useState<string[]>([]);
+  const [setupExamDate, setSetupExamDate] = useState(EMPTY_STATE.examDate);
+  const [setupScore, setSetupScore] = useState(100);
+  const [setupFullScore, setSetupFullScore] = useState(150);
+  const [sessionItems, setSessionItems] = useState<SessionItem[]>([]);
   const [sessionIndex, setSessionIndex] = useState(0);
-  const [sessionMode, setSessionMode] = useState<SessionMode>('daily');
+  const [sessionMode, setSessionMode] = useState<SessionMode>('new');
   const [revealed, setRevealed] = useState(false);
-  const [spellingAnswer, setSpellingAnswer] = useState('');
-  const [spellingResult, setSpellingResult] = useState<boolean | null>(null);
   const [sessionStats, setSessionStats] = useState({ reviewed: 0, correct: 0 });
   const [sessionDone, setSessionDone] = useState(false);
   const [notice, setNotice] = useState('');
@@ -198,7 +243,19 @@ export function VocabApp() {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as StudyState;
-        if (parsed.version === 1) setStudy(parsed);
+        if (parsed.version === 2) setStudy(parsed);
+      } else {
+        const legacy = window.localStorage.getItem('cixu-study-state-v1');
+        if (legacy) {
+          const parsed = JSON.parse(legacy) as Omit<StudyState, 'version' | 'examDate' | 'gaokaoScore' | 'gaokaoFullScore'>;
+          setStudy({
+            ...parsed,
+            version: 2,
+            examDate: EMPTY_STATE.examDate,
+            gaokaoScore: EMPTY_STATE.gaokaoScore,
+            gaokaoFullScore: EMPTY_STATE.gaokaoFullScore,
+          });
+        }
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -228,11 +285,6 @@ export function VocabApp() {
     () => new Map(WORDS.map((item) => [item.id, item])),
     [],
   );
-  const diagnosticWords = useMemo(() => {
-    const pool = getWordsForLevel(setupLevel);
-    return setupLevel === 'cet6' ? pool.slice(-5) : pool.slice(2, 7);
-  }, [setupLevel]);
-
   const today = dayKey();
   const dueWords = activeWords.filter((word) => {
     const record = study.reviews[word.id];
@@ -246,50 +298,66 @@ export function VocabApp() {
     (word) => wordStatus(study.reviews[word.id]) === 'learning',
   ).length;
   const todayRecord = study.history[today] ?? { reviewed: 0, correct: 0 };
-  const todayTarget = Math.max(
-    1,
-    dueWords.length + Math.min(study.dailyGoal, newWords.length),
-  );
+  const plan = studyPlan(study);
+  const todayNewGoal = Math.min(plan.dailyNew, newWords.length);
+  const todayTarget = Math.max(1, dueWords.length + todayNewGoal);
   const todayProgress = Math.min(
     100,
     Math.round((todayRecord.reviewed / todayTarget) * 100),
   );
 
-  function sessionQueue(mode: SessionMode, source = study) {
+  function sessionQueue(mode: SessionMode, source = study): SessionItem[] {
     const pool = getWordsForLevel(source.level);
     if (mode === 'mistakes') {
-      return source.mistakes.filter((id) => pool.some((word) => word.id === id));
+      return source.mistakes
+        .filter((id) => pool.some((word) => word.id === id))
+        .slice(0, 15)
+        .map((wordId, index) => ({
+          wordId,
+          phase: index % 3 === 0 ? 'review-listen' : 'review-context',
+        }));
     }
-    const due = pool
+    if (mode === 'review') {
+      return pool
       .filter((word) => {
         const record = source.reviews[word.id];
         return record && record.due <= dayKey();
       })
-      .map((word) => word.id);
+        .slice(0, 20)
+        .map((word, index) => ({
+          wordId: word.id,
+          phase: index % 3 === 0 ? 'review-listen' : 'review-context',
+        }));
+    }
+    const groupSize = 5;
     const fresh = pool
       .filter((word) => !source.reviews[word.id])
-      .slice(0, source.dailyGoal)
-      .map((word) => word.id);
-    return Array.from(new Set([...due, ...fresh])).slice(
-      0,
-      Math.max(source.dailyGoal, 10),
-    );
+      .slice(0, Math.min(groupSize, studyPlan(source).dailyNew));
+    return [
+      ...fresh.map((word) => ({ wordId: word.id, phase: 'listen' as const })),
+      ...fresh.map((word) => ({ wordId: word.id, phase: 'study' as const })),
+      ...fresh.map((word) => ({ wordId: word.id, phase: 'recall' as const })),
+    ];
   }
 
   function startSession(mode: SessionMode) {
     const queue = sessionQueue(mode);
     if (queue.length === 0) {
-      setNotice(mode === 'mistakes' ? '错词已经全部清空' : '今天的任务已经完成');
+      setNotice(
+        mode === 'mistakes'
+          ? '薄弱词已经全部清空'
+          : mode === 'review'
+            ? '今天没有到期词'
+            : '当前词库的新词已经学完',
+      );
       return false;
     }
     setSessionMode(mode);
-    setSessionIds(queue);
+    setSessionItems(queue);
     setSessionIndex(0);
     setSessionStats({ reviewed: 0, correct: 0 });
     setSessionDone(false);
     setRevealed(false);
-    setSpellingAnswer('');
-    setSpellingResult(null);
     setView('review');
     return true;
   }
@@ -333,13 +401,13 @@ export function VocabApp() {
     void Promise.resolve(
       context.registerTool(
         {
-          name: 'start_vocabulary_review',
-          title: '开始单词复习',
-          description: '打开今日复习或错词复习，并生成当前学习队列。',
+          name: 'start_vocabulary_session',
+          title: '开始背词',
+          description: '打开新词学习、到期复习或薄弱词巩固，并生成当前学习队列。',
           inputSchema: {
             type: 'object',
             properties: {
-              mode: { type: 'string', enum: ['daily', 'mistakes'] },
+              mode: { type: 'string', enum: ['new', 'review', 'mistakes'] },
             },
             required: ['mode'],
             additionalProperties: false,
@@ -351,8 +419,8 @@ export function VocabApp() {
               input !== null &&
               'mode' in input &&
               (input as { mode: unknown }).mode;
-            if (mode !== 'daily' && mode !== 'mistakes') {
-              throw new Error('mode 必须是 daily 或 mistakes');
+            if (mode !== 'new' && mode !== 'review' && mode !== 'mistakes') {
+              throw new Error('mode 必须是 new、review 或 mistakes');
             }
             const current = stateRef.current;
             if (!current.initialized) {
@@ -360,16 +428,20 @@ export function VocabApp() {
             }
             const queue = sessionQueue(mode, current);
             if (queue.length === 0) {
-              throw new Error(mode === 'mistakes' ? '当前没有错词' : '今天没有待复习单词');
+              throw new Error(
+                mode === 'mistakes'
+                  ? '当前没有薄弱词'
+                  : mode === 'review'
+                    ? '今天没有到期词'
+                    : '当前词库没有未学新词',
+              );
             }
             setSessionMode(mode);
-            setSessionIds(queue);
+            setSessionItems(queue);
             setSessionIndex(0);
             setSessionStats({ reviewed: 0, correct: 0 });
             setSessionDone(false);
             setRevealed(false);
-            setSpellingAnswer('');
-            setSpellingResult(null);
             setView('review');
             return { mode, count: queue.length, status: 'started' };
           },
@@ -381,44 +453,14 @@ export function VocabApp() {
     return () => lifecycle.abort();
   }, [ready]);
 
-  function beginDiagnostic() {
-    setDiagnosticIndex(0);
-    setDiagnosticKnown([]);
-    setOnboardingStep('quiz');
-  }
-
-  function answerDiagnostic(selectedMeaning: string) {
-    const word = diagnosticWords[diagnosticIndex];
-    const correct = selectedMeaning === word.meaning;
-    if (correct) setDiagnosticKnown((current) => [...current, word.id]);
-    if (diagnosticIndex === diagnosticWords.length - 1) {
-      setOnboardingStep('result');
-    } else {
-      setDiagnosticIndex((current) => current + 1);
-    }
-  }
-
   function completeOnboarding() {
-    const reviews = diagnosticKnown.reduce<Record<string, ReviewRecord>>(
-      (result, id) => {
-        result[id] = {
-          interval: 7,
-          due: addDays(7),
-          correct: 1,
-          wrong: 0,
-          correctStreak: 1,
-          lastReviewed: dayKey(),
-        };
-        return result;
-      },
-      {},
-    );
     setStudy({
       ...EMPTY_STATE,
       initialized: true,
       level: setupLevel,
-      dailyGoal: setupGoal,
-      reviews,
+      examDate: setupExamDate,
+      gaokaoScore: Math.max(0, setupScore),
+      gaokaoFullScore: Math.max(1, setupFullScore),
     });
     setView('today');
   }
@@ -427,13 +469,19 @@ export function VocabApp() {
     setStudy((current) => {
       const previous = current.reviews[word.id];
       const previousInterval = previous?.interval ?? 0;
+      const correctStreak =
+        grade === 2
+          ? (previous?.correctStreak ?? 0) + 1
+          : grade === 1
+            ? Math.max(0, (previous?.correctStreak ?? 0) - 1)
+            : 0;
+      const reviewSteps = [1, 3, 7, 14, 21, 30, 60];
       const interval =
         grade === 0
           ? 1
           : grade === 1
-            ? Math.max(2, Math.round(previousInterval * 1.4) || 2)
-            : Math.max(4, Math.round(previousInterval * 2.1) || 4);
-      const correctStreak = grade === 2 ? (previous?.correctStreak ?? 0) + 1 : 0;
+            ? Math.max(1, Math.round(previousInterval * 0.65) || 1)
+            : reviewSteps[Math.min(correctStreak - 1, reviewSteps.length - 1)];
       const mistakes =
         grade === 0
           ? Array.from(new Set([...current.mistakes, word.id]))
@@ -462,6 +510,7 @@ export function VocabApp() {
           [today]: {
             reviewed: history.reviewed + 1,
             correct: history.correct + (grade === 2 ? 1 : 0),
+            learned: (history.learned ?? 0) + (previous ? 0 : 1),
           },
         },
       };
@@ -473,29 +522,31 @@ export function VocabApp() {
   }
 
   function advanceSession() {
-    if (sessionIndex >= sessionIds.length - 1) {
+    if (sessionIndex >= sessionItems.length - 1) {
       setSessionDone(true);
       return;
     }
     setSessionIndex((current) => current + 1);
     setRevealed(false);
-    setSpellingAnswer('');
-    setSpellingResult(null);
   }
 
-  function gradeRecognition(word: Word, grade: 0 | 1 | 2) {
+  function gradeRecall(word: Word, grade: 0 | 1 | 2) {
     recordGrade(word, grade);
-    advanceSession();
-  }
-
-  function checkSpelling(event?: FormEvent) {
-    event?.preventDefault();
-    const word = wordMap.get(sessionIds[sessionIndex]);
-    if (!word || spellingResult !== null) return;
-    const correct =
-      spellingAnswer.trim().toLocaleLowerCase() === word.word.toLocaleLowerCase();
-    setSpellingResult(correct);
-    recordGrade(word, correct ? 2 : 0);
+    const needsRetry = grade < 2;
+    if (needsRetry) {
+      setSessionItems((current) => {
+        const next = [...current];
+        const insertAt = Math.min(sessionIndex + (grade === 0 ? 4 : 7), next.length);
+        next.splice(insertAt, 0, { wordId: word.id, phase: 'recall', retry: true });
+        return next;
+      });
+    }
+    if (sessionIndex >= sessionItems.length - 1 && !needsRetry) {
+      setSessionDone(true);
+    } else {
+      setSessionIndex((current) => current + 1);
+      setRevealed(false);
+    }
   }
 
   useEffect(() => {
@@ -503,21 +554,21 @@ export function VocabApp() {
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
       if (target.tagName === 'INPUT') return;
-      const word = wordMap.get(sessionIds[sessionIndex]);
+      const item = sessionItems[sessionIndex];
+      const word = wordMap.get(item?.wordId);
       if (!word) return;
-      const mode: QuestionMode = sessionIndex % 3 === 1 ? 'spelling' : 'recognition';
-      if (mode === 'recognition' && !revealed && event.code === 'Space') {
+      if (!revealed && event.code === 'Space') {
         event.preventDefault();
         setRevealed(true);
-      } else if (mode === 'recognition' && revealed) {
-        if (event.key === '1') gradeRecognition(word, 0);
-        if (event.key === '2') gradeRecognition(word, 1);
-        if (event.key === '3') gradeRecognition(word, 2);
+      } else if (revealed && ['recall', 'review-listen', 'review-context'].includes(item.phase)) {
+        if (event.key === '1') gradeRecall(word, 0);
+        if (event.key === '2') gradeRecall(word, 1);
+        if (event.key === '3') gradeRecall(word, 2);
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [revealed, sessionDone, sessionIds, sessionIndex, view, wordMap]);
+  }, [revealed, sessionDone, sessionItems, sessionIndex, view, wordMap]);
 
   function toggleSaved(id: string) {
     setStudy((current) => ({
@@ -547,8 +598,9 @@ export function VocabApp() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as StudyState;
-        if (parsed.version !== 1 || !parsed.reviews || !parsed.history) {
+        if (typeof reader.result !== 'string') throw new Error('invalid');
+        const parsed = JSON.parse(reader.result) as StudyState;
+        if (parsed.version !== 2 || !parsed.reviews || !parsed.history) {
           throw new Error('invalid');
         }
         setStudy(parsed);
@@ -566,8 +618,9 @@ export function VocabApp() {
     if (!window.confirm('确定清空当前设备上的全部学习记录吗？')) return;
     setStudy(EMPTY_STATE);
     setSetupLevel('cet6');
-    setSetupGoal(20);
-    setOnboardingStep('setup');
+    setSetupExamDate(EMPTY_STATE.examDate);
+    setSetupScore(100);
+    setSetupFullScore(150);
     setSettingsOpen(false);
   }
 
@@ -585,44 +638,39 @@ export function VocabApp() {
   if (!study.initialized) {
     return (
       <Onboarding
-        step={onboardingStep}
         level={setupLevel}
-        goal={setupGoal}
-        words={diagnosticWords}
-        index={diagnosticIndex}
-        knownCount={diagnosticKnown.length}
+        examDate={setupExamDate}
+        score={setupScore}
+        fullScore={setupFullScore}
         onLevelChange={setSetupLevel}
-        onGoalChange={setSetupGoal}
-        onBegin={beginDiagnostic}
-        onAnswer={answerDiagnostic}
+        onExamDateChange={setSetupExamDate}
+        onScoreChange={setSetupScore}
+        onFullScoreChange={setSetupFullScore}
         onComplete={completeOnboarding}
       />
     );
   }
 
-  const currentWord = wordMap.get(sessionIds[sessionIndex]);
-  const questionMode: QuestionMode =
-    sessionIndex % 3 === 1 ? 'spelling' : 'recognition';
+  const currentItem = sessionItems[sessionIndex];
+  const currentWord = wordMap.get(currentItem?.wordId);
 
-  if (view === 'review' && currentWord) {
+  if (view === 'review' && currentWord && currentItem) {
     return (
       <ReviewSession
         word={currentWord}
-        mode={questionMode}
+        phase={currentItem.phase}
+        retry={Boolean(currentItem.retry)}
         sessionMode={sessionMode}
         index={sessionIndex}
-        total={sessionIds.length}
+        total={sessionItems.length}
         revealed={revealed}
-        spellingAnswer={spellingAnswer}
-        spellingResult={spellingResult}
         stats={sessionStats}
         done={sessionDone}
         onReveal={() => setRevealed(true)}
-        onGrade={(grade) => gradeRecognition(currentWord, grade)}
-        onSpellingChange={setSpellingAnswer}
-        onCheckSpelling={checkSpelling}
+        onGrade={(grade) => gradeRecall(currentWord, grade)}
         onAdvance={advanceSession}
         onSpeak={() => speakWord(currentWord.word)}
+        onListen={() => speakSentence(currentWord.example)}
         onExit={() => setView('today')}
       />
     );
@@ -656,7 +704,9 @@ export function VocabApp() {
               todayRecord={todayRecord}
               todayTarget={todayTarget}
               todayProgress={todayProgress}
-              onStart={() => startSession('daily')}
+              plan={plan}
+              onStartNew={() => startSession('new')}
+              onStartReview={() => startSession('review')}
               onMistakes={() => startSession('mistakes')}
             />
           )}
@@ -718,12 +768,11 @@ export function VocabApp() {
       />
 
       {notice && (
-        <div
+        <output
           className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg lg:bottom-7"
-          role="status"
         >
           {notice}
-        </div>
+        </output>
       )}
     </main>
   );
@@ -851,7 +900,9 @@ function TodayView({
   todayRecord,
   todayTarget,
   todayProgress,
-  onStart,
+  plan,
+  onStartNew,
+  onStartReview,
   onMistakes,
 }: {
   study: StudyState;
@@ -863,20 +914,18 @@ function TodayView({
   todayRecord: DayRecord;
   todayTarget: number;
   todayProgress: number;
-  onStart(): void;
+  plan: ReturnType<typeof studyPlan>;
+  onStartNew(): void;
+  onStartReview(): void;
   onMistakes(): void;
 }) {
-  const nextWord =
-    activeWords.find((word) => {
-      const record = study.reviews[word.id];
-      return record && record.due <= dayKey();
-    }) ??
-    activeWords.find((word) => !study.reviews[word.id]) ??
-    activeWords[0];
   const correctRate =
     todayRecord.reviewed > 0
       ? Math.round((todayRecord.correct / todayRecord.reviewed) * 100)
       : 0;
+  const newBatchCount = Math.min(5, newCount);
+  const groups = Math.max(1, Math.ceil(plan.dailyNew / 5));
+  const primaryIsReview = dueCount > 0;
 
   return (
     <>
@@ -890,11 +939,11 @@ function TodayView({
             }).format(new Date())}
           </p>
           <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-            今天继续，别赶进度。
+            {primaryIsReview ? '先把该复习的记牢。' : '今天从五个新词开始。'}
           </h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          {levelLabel(study.level)} · 每日新词 {study.dailyGoal}
+          {levelLabel(study.level)} · {plan.phase} · 距考试 {plan.daysLeft} 天
         </p>
       </div>
 
@@ -904,72 +953,107 @@ function TodayView({
           <div className="absolute -right-2 top-20 size-24 rounded-full border border-white/10" />
           <div className="relative">
             <div className="mb-12 flex items-center gap-2 text-sm text-primary-foreground/70">
-              <RotateCcw className="size-4" />
-              {todayRecord.reviewed >= todayTarget ? '加练一组' : '今日复习'}
+              {primaryIsReview ? <RotateCcw className="size-4" /> : <Headphones className="size-4" />}
+              {primaryIsReview ? '第一步 · 到期复习' : '第一步 · 新词学习'}
             </div>
-            <p className="mb-2 text-sm text-primary-foreground/65">下一词</p>
-            <h2 className="font-heading text-[clamp(2.35rem,6vw,4.6rem)] font-semibold leading-none tracking-[-0.055em]">
-              {nextWord.word}
+            <p className="mb-3 text-sm text-primary-foreground/65">
+              {primaryIsReview ? '今天到期' : '一组只背'}
+            </p>
+            <h2 className="font-heading text-[clamp(2.7rem,7vw,5rem)] font-semibold leading-none tracking-[-0.055em]">
+              {primaryIsReview ? `${dueCount} 个` : `${newBatchCount} 个`}
             </h2>
-            <p className="mt-4 text-base text-primary-foreground/75">
-              {nextWord.phonetic} · {nextWord.partOfSpeech} {nextWord.meaning}
+            <p className="mt-5 max-w-lg text-sm leading-6 text-primary-foreground/72">
+              {primaryIsReview
+                ? '到期词优先，用听句子和语境回忆把记忆重新拉回来。'
+                : '先听例句，再看词义，最后回到句子里主动想一次。'}
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
               <Button
                 size="lg"
                 className="h-11 rounded-full bg-[#f6f0e2] px-5 text-[#173e34] hover:bg-white"
-                onClick={onStart}
+                onClick={primaryIsReview ? onStartReview : onStartNew}
               >
-                {todayRecord.reviewed > 0 ? '继续复习' : '开始复习'}
+                {primaryIsReview ? '开始到期复习' : '背第一组新词'}
                 <ArrowRight data-icon="inline-end" />
               </Button>
               <span className="text-sm text-primary-foreground/65">
-                {dueCount + Math.min(study.dailyGoal, newCount)} 个词 · 约 12 分钟
+                {primaryIsReview ? '先复习，再学新词' : '约 4 分钟'}
               </span>
             </div>
           </div>
         </article>
 
         <article className="rounded-[22px] border border-border bg-card p-6 sm:p-7">
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-7 flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">今日任务</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight">
-                {todayRecord.reviewed} / {todayTarget}
-              </p>
+              <p className="text-sm text-muted-foreground">备考节奏</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight">{plan.phase}</p>
             </div>
             <span className="grid size-10 place-items-center rounded-full bg-secondary text-primary">
-              <ListChecks className="size-5" />
+              <CalendarDays className="size-5" />
             </span>
+          </div>
+          <div className="rounded-xl bg-secondary/45 p-4">
+            <p className="text-xs text-muted-foreground">目标考试日</p>
+            <p className="mt-1 font-medium">{study.examDate.replaceAll('-', '.')}</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              每天建议新学 <strong className="font-semibold text-foreground">{plan.dailyNew} 个</strong>，分 {groups} 组；考前预留 {plan.consolidationDays} 天只做回收与真题语境。
+            </p>
+          </div>
+          <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground">
+            <span>今日总进度</span>
+            <span>{todayRecord.reviewed} / {todayTarget}</span>
           </div>
           <Progress
             value={todayProgress}
-            className="mb-7 [&_[data-slot=progress-track]]:h-2"
+            className="mt-2 [&_[data-slot=progress-track]]:h-1.5"
           />
-          <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">到期复习</span>
-              <span className="font-medium">{dueCount} 个</span>
+        </article>
+      </div>
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <article className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">到期复习</p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight">{dueCount} 个</p>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">今日新词</span>
-              <span className="font-medium">
-                {Math.min(study.dailyGoal, newCount)} 个
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">今日正确率</span>
-              <span className="font-medium">{correctRate || '—'}{correctRate ? '%' : ''}</span>
-            </div>
+            <span className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
+              <RotateCcw className="size-4" />
+            </span>
           </div>
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
+            听完整句或结合上下文回忆，不做孤立的近义词配对。
+          </p>
+          <Button variant="outline" className="mt-5 w-full" disabled={dueCount === 0} onClick={onStartReview}>
+            {dueCount > 0 ? '复习到期词' : '今天已清空'}
+          </Button>
+        </article>
+
+        <article className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">新词背诵</p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight">{plan.dailyNew} 个</p>
+            </div>
+            <span className="grid size-9 place-items-center rounded-full bg-secondary text-primary">
+              <Headphones className="size-4" />
+            </span>
+          </div>
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
+            每组 5 个：先听句子，再理解词义，最后回到原句主动回忆。
+          </p>
+          <Button className="mt-5 w-full" disabled={newCount === 0} onClick={onStartNew}>
+            背一组新词
+          </Button>
         </article>
       </div>
 
       <div className="mt-5 grid gap-5 md:grid-cols-3">
         <article className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-sm text-muted-foreground">正在学习</p>
+          <p className="text-sm text-muted-foreground">今天新学</p>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
-            {learningCount}{' '}
+            {todayRecord.learned ?? 0}{' '}
             <span className="text-sm font-normal text-muted-foreground">个词</span>
           </p>
         </article>
@@ -978,7 +1062,7 @@ function TodayView({
           onClick={onMistakes}
         >
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">薄弱词</p>
+            <p className="text-sm text-muted-foreground">需要再记</p>
             <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
@@ -990,16 +1074,15 @@ function TodayView({
           <p className="text-sm text-muted-foreground">词库进度</p>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
             {Math.round((masteredCount / activeWords.length) * 100)}%{' '}
-            <span className="text-sm font-normal text-muted-foreground">
-              已掌握 {masteredCount}
-            </span>
+            <span className="text-sm font-normal text-muted-foreground">已稳定 {masteredCount}</span>
           </p>
         </article>
       </div>
 
-      <div className="mt-8 flex items-center gap-3 border-t border-border pt-5 text-xs text-muted-foreground">
-        <span className="size-1.5 rounded-full bg-primary/55" />
-        学习记录只保存在当前浏览器，可在设置中导出备份。
+      <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-5 text-xs text-muted-foreground">
+        <span>今日回忆正确率 {correctRate || '—'}{correctRate ? '%' : ''}</span>
+        <span>正在学习 {learningCount} 个</span>
+        <span>记录仅保存在当前浏览器</span>
       </div>
     </>
   );
@@ -1314,7 +1397,7 @@ function ProgressView({
             ))}
           </div>
           <p className="mt-8 border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
-            “已掌握”只统计经过多轮复习、间隔达到 14 天以上的单词。
+            “已掌握”只统计经过多轮主动回忆、间隔达到 21 天以上的单词。
           </p>
         </article>
       </div>
@@ -1324,42 +1407,57 @@ function ProgressView({
 
 function ReviewSession({
   word,
-  mode,
+  phase,
+  retry,
   sessionMode,
   index,
   total,
   revealed,
-  spellingAnswer,
-  spellingResult,
   stats,
   done,
   onReveal,
   onGrade,
-  onSpellingChange,
-  onCheckSpelling,
   onAdvance,
   onSpeak,
+  onListen,
   onExit,
 }: {
   word: Word;
-  mode: QuestionMode;
+  phase: LearningPhase;
+  retry: boolean;
   sessionMode: SessionMode;
   index: number;
   total: number;
   revealed: boolean;
-  spellingAnswer: string;
-  spellingResult: boolean | null;
   stats: { reviewed: number; correct: number };
   done: boolean;
   onReveal(): void;
   onGrade(grade: 0 | 1 | 2): void;
-  onSpellingChange(value: string): void;
-  onCheckSpelling(event?: FormEvent): void;
   onAdvance(): void;
   onSpeak(): void;
+  onListen(): void;
   onExit(): void;
 }) {
   const progress = done ? 100 : Math.round((index / total) * 100);
+  const isListening = phase === 'listen' || phase === 'review-listen';
+  const isAssessment = ['recall', 'review-listen', 'review-context'].includes(phase);
+  const phaseLabel =
+    phase === 'listen'
+      ? '先听一句，抓住你能听到的词'
+      : phase === 'study'
+        ? '看懂这个词在句子里怎么用'
+        : phase === 'review-listen'
+          ? '听完整句，再回忆关键词'
+          : retry
+            ? '刚才没记牢，再从句子里想一次'
+            : '结合整句，回忆加粗词的含义';
+  const sentenceParts = word.example.split(new RegExp(`(${word.word})`, 'i'));
+
+  useEffect(() => {
+    if (!isListening || done) return;
+    const timeout = window.setTimeout(onListen, 260);
+    return () => window.clearTimeout(timeout);
+  }, [done, isListening, onListen, word.id]);
 
   if (done) {
     const rate = stats.reviewed
@@ -1372,13 +1470,13 @@ function ReviewSession({
             <Check className="size-6" />
           </span>
           <p className="mt-7 text-sm text-muted-foreground">
-            {sessionMode === 'daily' ? '今日复习' : '错词复习'}
+            {sessionMode === 'new' ? '新词背诵' : sessionMode === 'review' ? '到期复习' : '薄弱词巩固'}
           </p>
           <h1 className="mt-2 font-heading text-3xl font-semibold">这一组完成了</h1>
           <div className="mx-auto mt-8 grid max-w-sm grid-cols-2 divide-x divide-border rounded-2xl border border-border py-5">
             <div>
               <p className="text-2xl font-semibold">{stats.reviewed}</p>
-              <p className="mt-1 text-xs text-muted-foreground">完成词数</p>
+              <p className="mt-1 text-xs text-muted-foreground">主动回忆</p>
             </div>
             <div>
               <p className="text-2xl font-semibold">{rate}%</p>
@@ -1407,212 +1505,137 @@ function ReviewSession({
 
       <section className="mx-auto mt-[clamp(2.5rem,8vh,6rem)] max-w-3xl">
         <div className="mb-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span>{mode === 'recognition' ? '看到单词，回忆含义' : '根据释义，拼出单词'}</span>
+          <span>{phaseLabel}</span>
           <Badge variant="outline" className="font-normal">
             {word.level === 'cet4' ? '四级' : '六级'}
           </Badge>
         </div>
 
-        {mode === 'recognition' ? (
-          <article className="rounded-[26px] border border-border bg-card p-7 sm:p-12">
-            <div className="text-center">
+        <article className="rounded-[26px] border border-border bg-card p-7 sm:p-12">
+          {isListening && !revealed ? (
+            <div className="py-6 text-center sm:py-10">
               <button
-                onClick={onSpeak}
-                className="group inline-flex items-center gap-3"
-                aria-label={'播放 ' + word.word}
+                onClick={onListen}
+                className="mx-auto grid size-24 place-items-center rounded-full bg-secondary text-primary transition-transform hover:scale-[1.03]"
+                aria-label="播放完整例句"
               >
-                <h1 className="font-heading text-[clamp(2.8rem,9vw,5.4rem)] font-semibold leading-none tracking-[-0.055em]">
-                  {word.word}
-                </h1>
-                <Volume2 className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                <Play className="ml-1 size-8" fill="currentColor" />
               </button>
-              <p className="mt-4 text-sm text-muted-foreground">{word.phonetic}</p>
+              <h1 className="mt-8 font-heading text-2xl font-semibold sm:text-3xl">先别看文字，听一遍</h1>
+              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+                不需要逐字听清，先抓句子的语气和关键词。
+              </p>
+              <Button variant="outline" className="mt-9 rounded-full px-6" onClick={onReveal}>
+                听完了，看原句
+              </Button>
             </div>
-
-            {!revealed ? (
-              <div className="mt-16 text-center">
-                <Button className="h-11 rounded-full px-6" onClick={onReveal}>
-                  查看释义
-                </Button>
-                <p className="mt-3 text-xs text-muted-foreground">空格键</p>
-              </div>
-            ) : (
-              <div className="mt-12 border-t border-border pt-8">
-                <p className="text-lg">
-                  <span className="mr-2 text-sm text-muted-foreground">{word.partOfSpeech}</span>
-                  {word.meaning}
-                </p>
-                <p className="mt-5 text-sm font-medium">{word.collocation}</p>
-                <p className="mt-2 text-sm leading-7 text-muted-foreground">{word.example}</p>
-                <div className="mt-9 grid gap-2 sm:grid-cols-3">
-                  <Button
-                    variant="outline"
-                    className="h-11 justify-between px-4"
-                    onClick={() => onGrade(0)}
-                  >
-                    忘了 <kbd className="text-xs text-muted-foreground">1</kbd>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-11 justify-between px-4"
-                    onClick={() => onGrade(1)}
-                  >
-                    模糊 <kbd className="text-xs text-muted-foreground">2</kbd>
-                  </Button>
-                  <Button
-                    className="h-11 justify-between px-4"
-                    onClick={() => onGrade(2)}
-                  >
-                    记得 <kbd className="text-xs text-primary-foreground/70">3</kbd>
-                  </Button>
+          ) : (
+            <>
+              {phase === 'study' ? (
+                <div className="text-center">
+                  <button onClick={onSpeak} className="group inline-flex items-center gap-3" aria-label={'播放 ' + word.word}>
+                    <h1 className="font-heading text-[clamp(2.8rem,9vw,5rem)] font-semibold leading-none tracking-[-0.055em]">{word.word}</h1>
+                    <Volume2 className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                  </button>
+                  <p className="mt-4 text-sm text-muted-foreground">{word.phonetic}</p>
+                  <p className="mt-7 text-xl font-medium"><span className="mr-2 text-sm text-muted-foreground">{word.partOfSpeech}</span>{word.meaning}</p>
                 </div>
-              </div>
-            )}
-          </article>
-        ) : (
-          <article className="rounded-[26px] border border-border bg-card p-7 sm:p-12">
-            <p className="text-center text-sm text-muted-foreground">{word.partOfSpeech}</p>
-            <h1 className="mt-3 text-center font-heading text-2xl font-semibold sm:text-3xl">
-              {word.meaning}
-            </h1>
-            <p className="mx-auto mt-8 max-w-xl text-center text-sm leading-7 text-muted-foreground">
-              {word.example.replace(new RegExp(word.word, 'i'), '＿＿＿＿＿＿')}
-            </p>
-            <form className="mx-auto mt-10 max-w-md" onSubmit={onCheckSpelling}>
-              <Input
-                autoFocus
-                autoComplete="off"
-                spellCheck={false}
-                value={spellingAnswer}
-                disabled={spellingResult !== null}
-                onChange={(event) => onSpellingChange(event.target.value)}
-                placeholder="输入英文单词"
-                className={cn(
-                  'h-12 rounded-xl text-center text-lg',
-                  spellingResult === true && 'border-primary bg-secondary/35',
-                  spellingResult === false && 'border-destructive bg-destructive/5',
-                )}
-              />
-              {spellingResult === null ? (
-                <Button
-                  type="submit"
-                  className="mt-3 h-11 w-full rounded-xl"
-                  disabled={!spellingAnswer.trim()}
-                >
-                  检查拼写
-                </Button>
               ) : (
-                <div className="mt-5">
-                  <div
-                    className={cn(
-                      'rounded-xl px-4 py-3 text-center text-sm',
-                      spellingResult
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'bg-destructive/8 text-destructive',
-                    )}
-                  >
-                    {spellingResult ? '拼写正确' : '正确拼写：' + word.word}
+                <div>
+                  <div className="mb-5 flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">IN CONTEXT</span>
+                    <Button size="sm" variant="ghost" onClick={onListen}><Volume2 data-icon="inline-start" />听原句</Button>
                   </div>
-                  <Button className="mt-3 h-11 w-full rounded-xl" onClick={onAdvance}>
-                    下一个
-                    <ArrowRight data-icon="inline-end" />
+                  <p className="font-heading text-xl leading-9 sm:text-2xl sm:leading-10">
+                    {sentenceParts.map((part, partIndex) =>
+                      part.toLocaleLowerCase() === word.word.toLocaleLowerCase() ? (
+                        <mark key={partIndex} className="rounded bg-secondary px-1 text-primary">{part}</mark>
+                      ) : (
+                        <span key={partIndex}>{part}</span>
+                      ),
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {phase === 'study' && (
+                <div className="mt-10 rounded-2xl bg-muted/65 p-5">
+                  <p className="text-sm leading-7 text-foreground">{word.example}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    句中 <strong className="font-semibold text-foreground">{word.word}</strong> 表示“{word.meaning}”，常见搭配：{word.collocation}。
+                  </p>
+                </div>
+              )}
+
+              {phase !== 'study' && !revealed ? (
+                <div className="mt-12 text-center">
+                  <p className="text-sm text-muted-foreground">先结合整句话想一想，不必逐字翻译。</p>
+                  <Button className="mt-5 rounded-full px-6" onClick={onReveal}>我想好了，查看句中含义</Button>
+                  <p className="mt-3 text-xs text-muted-foreground">空格键</p>
+                </div>
+              ) : (
+                phase !== 'study' && (
+                  <div className="mt-10 border-t border-border pt-7">
+                    <p className="text-lg"><span className="mr-2 text-sm text-muted-foreground">{word.partOfSpeech}</span>{word.meaning}</p>
+                    <p className="mt-3 text-sm text-muted-foreground">这句话里的常见搭配是 <strong className="font-medium text-foreground">{word.collocation}</strong>。</p>
+                  </div>
+                )
+              )}
+
+              {(phase === 'study' || (phase === 'listen' && revealed)) && (
+                <Button className="mt-9 w-full sm:ml-auto sm:block sm:w-auto" onClick={onAdvance}>
+                  继续下一词 <ArrowRight data-icon="inline-end" />
+                </Button>
+              )}
+
+              {isAssessment && revealed && (
+                <div className="mt-9 grid gap-2 sm:grid-cols-3">
+                  <Button variant="outline" className="h-11 justify-between px-4" onClick={() => onGrade(0)}>
+                    没想起来 <kbd className="text-xs text-muted-foreground">1</kbd>
+                  </Button>
+                  <Button variant="outline" className="h-11 justify-between px-4" onClick={() => onGrade(1)}>
+                    有点模糊 <kbd className="text-xs text-muted-foreground">2</kbd>
+                  </Button>
+                  <Button className="h-11 justify-between px-4" onClick={() => onGrade(2)}>
+                    想起来了 <kbd className="text-xs text-primary-foreground/70">3</kbd>
                   </Button>
                 </div>
               )}
-            </form>
-          </article>
-        )}
+            </>
+          )}
+        </article>
       </section>
     </main>
   );
 }
 
 function Onboarding({
-  step,
   level,
-  goal,
-  words,
-  index,
-  knownCount,
+  examDate,
+  score,
+  fullScore,
   onLevelChange,
-  onGoalChange,
-  onBegin,
-  onAnswer,
+  onExamDateChange,
+  onScoreChange,
+  onFullScoreChange,
   onComplete,
 }: {
-  step: 'setup' | 'quiz' | 'result';
   level: WordLevel;
-  goal: number;
-  words: Word[];
-  index: number;
-  knownCount: number;
+  examDate: string;
+  score: number;
+  fullScore: number;
   onLevelChange(level: WordLevel): void;
-  onGoalChange(goal: number): void;
-  onBegin(): void;
-  onAnswer(meaning: string): void;
+  onExamDateChange(date: string): void;
+  onScoreChange(score: number): void;
+  onFullScoreChange(score: number): void;
   onComplete(): void;
 }) {
-  if (step === 'quiz') {
-    const word = words[index];
-    const options = [
-      word.meaning,
-      words[(index + 2) % words.length].meaning,
-      words[(index + 3) % words.length].meaning,
-    ].sort((a, b) => (a.length + index) % 3 - (b.length + index) % 3);
-    return (
-      <main className="min-h-screen bg-background px-5 py-8 text-foreground">
-        <header className="mx-auto flex max-w-2xl items-center justify-between">
-          <span className="flex items-center gap-2.5">
-            <span className="grid size-8 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">词</span>
-            <span className="font-semibold tracking-[0.12em]">词序</span>
-          </span>
-          <span className="text-sm text-muted-foreground">{index + 1} / {words.length}</span>
-        </header>
-        <section className="mx-auto mt-[clamp(3rem,12vh,7rem)] max-w-2xl">
-          <p className="text-center text-sm text-muted-foreground">快速摸底 · 请选择正确释义</p>
-          <h1 className="mt-5 text-center font-heading text-[clamp(3rem,10vw,5rem)] font-semibold tracking-[-0.05em]">
-            {word.word}
-          </h1>
-          <p className="mt-3 text-center text-sm text-muted-foreground">{word.phonetic}</p>
-          <div className="mt-12 grid gap-3">
-            {options.map((option) => (
-              <Button
-                key={option}
-                variant="outline"
-                className="h-auto min-h-14 justify-start rounded-xl bg-card px-5 py-4 text-left font-normal"
-                onClick={() => onAnswer(option)}
-              >
-                {option}
-              </Button>
-            ))}
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (step === 'result') {
-    return (
-      <main className="grid min-h-screen place-items-center bg-background px-5">
-        <section className="w-full max-w-lg rounded-[26px] border border-border bg-card p-8 text-center sm:p-10">
-          <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary text-primary">
-            <Gauge className="size-5" />
-          </span>
-          <p className="mt-6 text-sm text-muted-foreground">摸底完成</p>
-          <h1 className="mt-2 font-heading text-3xl font-semibold">
-            认识 {knownCount} / {words.length} 个
-          </h1>
-          <p className="mx-auto mt-4 max-w-sm text-sm leading-6 text-muted-foreground">
-            已认识的词会延后复习，其余单词将从今天开始安排。
-          </p>
-          <Button className="mt-8 h-11 rounded-full px-6" onClick={onComplete}>
-            进入今日任务
-            <ArrowRight data-icon="inline-end" />
-          </Button>
-        </section>
-      </main>
-    );
-  }
+  const preview = studyPlan({
+    level,
+    examDate,
+    gaokaoScore: score,
+    gaokaoFullScore: fullScore,
+  });
 
   return (
     <main className="min-h-screen bg-background px-5 py-8 text-foreground">
@@ -1623,18 +1646,28 @@ function Onboarding({
         </span>
         <span className="text-xs text-muted-foreground">数据仅保存在当前设备</span>
       </header>
-      <section className="mx-auto mt-[clamp(3rem,10vh,6.5rem)] max-w-4xl">
+      <section className="mx-auto mt-[clamp(2.5rem,8vh,5.5rem)] max-w-4xl">
         <div className="grid gap-10 lg:grid-cols-[1fr_0.95fr] lg:items-start">
           <div>
-            <Badge variant="outline" className="font-normal">开始前花 1 分钟设置</Badge>
+            <Badge variant="outline" className="font-normal">按考试日期安排背词量</Badge>
             <h1 className="mt-5 font-heading text-[clamp(2.8rem,7vw,4.7rem)] font-semibold leading-[1.06] tracking-[-0.055em]">
-              每天少背一点，
+              少做测试，
               <br />
-              但按时回来。
+              直接开始背。
             </h1>
             <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground">
-              词序会把新词、到期词和错词排成一份清楚的每日任务。没有账号、没有云同步，也没有多余功能。
+              填考试日期和高考英语成绩，用来估算起点和每天的新词量。进入学习后，每组五个词，先听句子，再结合语境记。
             </p>
+            <div className="mt-8 max-w-sm rounded-2xl border border-border bg-card p-5">
+              <p className="text-sm text-muted-foreground">当前建议</p>
+              <div className="mt-3 flex items-end justify-between gap-4">
+                <div>
+                  <p className="font-heading text-3xl font-semibold">每天 {preview.dailyNew} 个</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{preview.phase} · 距考试 {preview.daysLeft} 天</p>
+                </div>
+                <Headphones className="mb-1 size-6 text-primary" />
+              </div>
+            </div>
           </div>
           <div className="rounded-[22px] border border-border bg-card p-6 sm:p-7">
             <div>
@@ -1656,25 +1689,42 @@ function Onboarding({
               </div>
             </div>
             <div className="mt-7">
-              <p className="text-sm font-medium">每天学习多少个新词？</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[10, 20, 30].map((item) => (
-                  <Button
-                    key={item}
-                    variant="outline"
-                    className={cn(
-                      'h-11 rounded-xl font-normal',
-                      goal === item && 'border-primary bg-secondary font-medium text-primary',
-                    )}
-                    onClick={() => onGoalChange(item)}
-                  >
-                    {item} 个
-                  </Button>
-                ))}
+              <label className="text-sm font-medium" htmlFor="exam-date">笔试日期</label>
+              <Input
+                id="exam-date"
+                type="date"
+                min={dateAfterToday(1)}
+                value={examDate}
+                onChange={(event) => onExamDateChange(event.target.value)}
+                className="mt-3 h-11"
+              />
+            </div>
+            <div className="mt-7">
+              <p className="text-sm font-medium">高考英语成绩</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">只用来粗定基础，不会把任何词直接判为掌握。</p>
+              <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  max={fullScore}
+                  value={score}
+                  onChange={(event) => onScoreChange(Number(event.target.value))}
+                  aria-label="高考英语得分"
+                  className="h-11 text-center"
+                />
+                <span className="text-muted-foreground">/</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={fullScore}
+                  onChange={(event) => onFullScoreChange(Number(event.target.value))}
+                  aria-label="高考英语满分"
+                  className="h-11 text-center"
+                />
               </div>
             </div>
-            <Button className="mt-8 h-11 w-full rounded-xl" onClick={onBegin}>
-              开始 5 词摸底
+            <Button className="mt-8 h-11 w-full rounded-xl" onClick={onComplete} disabled={!examDate || preview.daysLeft < 1}>
+              进入今日背诵
               <ArrowRight data-icon="inline-end" />
             </Button>
           </div>
@@ -1728,23 +1778,40 @@ function SettingsDialog({
             </div>
           </div>
           <div>
-            <p className="mb-2 text-sm font-medium">每日新词</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[10, 20, 30].map((goal) => (
-                <Button
-                  key={goal}
-                  variant="outline"
-                  className={cn(
-                    'h-10 font-normal',
-                    study.dailyGoal === goal && 'border-primary bg-secondary font-medium text-primary',
-                  )}
-                  onClick={() =>
-                    onStudyChange((current) => ({ ...current, dailyGoal: goal }))
-                  }
-                >
-                  {goal} 个
-                </Button>
-              ))}
+            <label className="mb-2 block text-sm font-medium" htmlFor="settings-exam-date">笔试日期</label>
+            <Input
+              id="settings-exam-date"
+              type="date"
+              min={dateAfterToday(1)}
+              value={study.examDate}
+              onChange={(event) => onStudyChange((current) => ({ ...current, examDate: event.target.value }))}
+              className="h-10"
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">高考英语成绩</p>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={study.gaokaoFullScore}
+                value={study.gaokaoScore}
+                onChange={(event) => onStudyChange((current) => ({ ...current, gaokaoScore: Number(event.target.value) }))}
+                aria-label="高考英语得分"
+                className="h-10 text-center"
+              />
+              <span className="text-muted-foreground">/</span>
+              <Input
+                type="number"
+                min={1}
+                value={study.gaokaoFullScore}
+                onChange={(event) => onStudyChange((current) => ({ ...current, gaokaoFullScore: Math.max(1, Number(event.target.value)) }))}
+                aria-label="高考英语满分"
+                className="h-10 text-center"
+              />
+            </div>
+            <div className="mt-3 rounded-xl bg-secondary/45 px-4 py-3 text-sm leading-6 text-muted-foreground">
+              当前为 {studyPlan(study).phase}，建议每天新学 <strong className="font-semibold text-foreground">{studyPlan(study).dailyNew} 个</strong>。
             </div>
           </div>
           <div className="border-t border-border pt-5">

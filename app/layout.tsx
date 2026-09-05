@@ -13,18 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '词序｜四六级词汇复习',
-  description: '用清晰的每日任务和间隔复习，稳稳记住四六级单词。',
+  title: '词序｜在句子里背四六级单词',
+  description: '按考试日期安排每天的背词量，先听句子，再结合语境记住四六级单词。',
   openGraph: {
-    title: '词序｜四六级词汇复习',
-    description: '每天少背一点，但按时回来。',
+    title: '词序｜在句子里背四六级单词',
+    description: '按考试日期安排背词量，先听句子，再结合语境记。',
     locale: 'zh_CN',
     type: 'website',
   },
   twitter: {
     card: 'summary',
-    title: '词序｜四六级词汇复习',
-    description: '每天少背一点，但按时回来。',
+    title: '词序｜在句子里背四六级单词',
+    description: '按考试日期安排背词量，先听句子，再结合语境记。',
   },
 };
 
