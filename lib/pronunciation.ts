@@ -1,49 +1,8 @@
 export type Pronunciation = {
   url: string;
-  fallbackUrl?: string;
   sourceUrl?: string;
   license?: { name?: string; url?: string };
 };
-export async function resolveOriginalRecording(
-  recording: Pronunciation,
-): Promise<Pronunciation> {
-  if (!recording.sourceUrl) return recording;
-  try {
-    const source = new URL(recording.sourceUrl);
-    if (source.hostname !== 'commons.wikimedia.org') return recording;
-    const query = new URLSearchParams({
-      action: 'query',
-      prop: 'imageinfo',
-      iiprop: 'url',
-      format: 'json',
-      origin: '*',
-    });
-    const pageId = source.searchParams.get('curid');
-    if (pageId && /^\d+$/.test(pageId)) query.set('pageids', pageId);
-    else if (source.pathname.startsWith('/wiki/File:'))
-      query.set('titles', decodeURIComponent(source.pathname.slice(6)));
-    else return recording;
-    const response = await fetch(
-      `https://commons.wikimedia.org/w/api.php?${query}`,
-      { signal: AbortSignal.timeout(4000), credentials: 'omit' },
-    );
-    if (!response.ok) return recording;
-    const data = await response.json();
-    const pages = Object.values(data.query?.pages ?? {}) as Array<{
-      imageinfo?: Array<{ url?: string }>;
-    }>;
-    const original = pages[0]?.imageinfo?.[0]?.url;
-    if (
-      !original ||
-      new URL(original).hostname !== 'upload.wikimedia.org' ||
-      !original.startsWith('https://')
-    )
-      return recording;
-    return { ...recording, url: original, fallbackUrl: recording.url };
-  } catch {
-    return recording;
-  }
-}
 const cache = new Map<string, Pronunciation>();
 const pending = new Map<string, Promise<Pronunciation>>();
 export function cachedPronunciation(word: string) {
@@ -88,9 +47,8 @@ export function preparePronunciation(word: string): Promise<Pronunciation> {
       if (!response.ok) throw new Error('Pronunciation unavailable');
       const selected = selectPronunciation(await response.json());
       if (!selected) throw new Error('No recording');
-      const result = await resolveOriginalRecording(selected);
-      cache.set(key, result);
-      return result;
+      cache.set(key, selected);
+      return selected;
     })
     .finally(() => pending.delete(key));
   pending.set(key, request);

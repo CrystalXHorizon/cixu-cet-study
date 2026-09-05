@@ -3,13 +3,22 @@ import { LoaderCircle, Play, Volume2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { speechPlayer } from '@/lib/speech-player';
 
-export function PlaybackNotice() {
+export function PlaybackNotice({
+  noticeOnly = false,
+}: {
+  noticeOnly?: boolean;
+}) {
   const playback = useSyncExternalStore(
     speechPlayer.subscribe,
     speechPlayer.getSnapshot,
     speechPlayer.getSnapshot,
   );
-  if (playback.status === 'idle') return null;
+  if (
+    noticeOnly
+      ? !playback.notice
+      : playback.status === 'idle' && !playback.notice
+  )
+    return null;
   return (
     <aside
       aria-label="发音播放状态"
@@ -21,8 +30,17 @@ export function PlaybackNotice() {
         <Volume2 className="size-5 shrink-0 text-primary" />
       )}
       <output className="min-w-0 flex-1 text-sm leading-6">
-        {playback.message ||
-          (playback.status === 'paused' ? '已暂停' : '正在播放')}
+        {playback.notice && <span className="block">{playback.notice}</span>}
+        {playback.status !== 'idle' && (
+          <span
+            className={
+              playback.notice ? 'mt-1 block text-muted-foreground' : ''
+            }
+          >
+            {playback.message ||
+              (playback.status === 'paused' ? '已暂停' : '正在播放')}
+          </span>
+        )}
       </output>
       {playback.retryable && (
         <Button size="sm" onClick={speechPlayer.retry}>

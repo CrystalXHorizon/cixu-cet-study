@@ -45,7 +45,6 @@ import { SentencePicker } from '@/components/sentence-picker';
 import { ListeningPractice } from '@/components/listening-practice';
 import { PlaybackNotice } from '@/components/playback-notice';
 import { StudyCalendar } from '@/components/study-calendar';
-import { preparePronunciation } from '@/lib/pronunciation';
 import { examPlanningDate, examSchedule, examSessionLabel, nextExamSession, normalizeExamSession } from '@/lib/exam-session';
 import { greeting, normalizeNickname, progressPercent, restoreListeningHistory, type ListeningDay } from '@/lib/study-dashboard';
 import { DEFAULT_AUDIO, restoreAudioPreferences, speechPlayer, type AudioPreferences } from '@/lib/speech-player';
@@ -1411,8 +1410,6 @@ function WordLibrary({
                     <h2 className="font-heading text-xl font-semibold">{word.word}</h2>
                     <button
                       aria-label={'播放 ' + word.word}
-                      onPointerEnter={() => void preparePronunciation(word.word).catch(() => {})}
-                      onFocus={() => void preparePronunciation(word.word).catch(() => {})}
                       onClick={() => onSpeak(word.word)}
                       className="text-muted-foreground hover:text-foreground"
                     >
@@ -1764,7 +1761,6 @@ function ReviewSession({
 
   return (
     <main className="min-h-screen bg-background px-5 py-5 text-foreground sm:py-7">
-      <PlaybackNotice />
       <header className="mx-auto flex max-w-4xl items-center gap-4">
         <Button size="icon" variant="ghost" onClick={onExit} aria-label="退出复习">
           <X />

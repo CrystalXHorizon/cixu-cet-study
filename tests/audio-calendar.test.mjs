@@ -3,7 +3,6 @@ import test from 'node:test';
 import {
   selectPronunciation,
   preparePronunciation,
-  resolveOriginalRecording,
 } from '../lib/pronunciation.ts';
 import { SpeechPlayer } from '../lib/speech-player.ts';
 import {
@@ -11,39 +10,6 @@ import {
   learningDays,
   scheduleForDay,
 } from '../lib/study-schedule.ts';
-
-test('Commons sources resolve to the same original recording with a proxy fallback', async (context) => {
-  context.mock.method(globalThis, 'fetch', async (url) => {
-    assert.match(String(url), /pageids=589431/);
-    return {
-      ok: true,
-      json: async () => ({
-        query: {
-          pages: {
-            589431: {
-              imageinfo: [
-                {
-                  url: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/En-us-you.ogg',
-                },
-              ],
-            },
-          },
-        },
-      }),
-    };
-  });
-  const record = {
-    url: 'https://api.dictionaryapi.dev/media/pronunciations/en/you-us-stressed.mp3',
-    sourceUrl: 'https://commons.wikimedia.org/w/index.php?curid=589431',
-  };
-  const resolved = await resolveOriginalRecording(record);
-  assert.equal(
-    resolved.url,
-    'https://upload.wikimedia.org/wikipedia/commons/6/6c/En-us-you.ogg',
-  );
-  assert.equal(resolved.fallbackUrl, record.url);
-  assert.equal(resolved.sourceUrl, record.sourceUrl);
-});
 
 test('isolated word pronunciation prefers stressed recordings', () => {
   const result = selectPronunciation([
@@ -93,7 +59,7 @@ test('blocked recording provides a direct, synchronous retry and no silent TTS f
   );
   await player.playWord('retry-test');
   assert.equal(player.getSnapshot().retryable, true);
-  assert.match(player.getSnapshot().message, /音频已就绪/);
+  assert.match(player.getSnapshot().message, /声音已经准备好了/);
   player.retry();
   assert.equal(
     calls,
@@ -109,13 +75,17 @@ test('blocked recording provides a direct, synchronous retry and no silent TTS f
   player.stop();
 });
 
-test('network failure falls back to speech, and exiting cancels pending audio', async (context) => {
+test('local English speech works without requesting online audio', async (context) => {
+  let requests = 0;
   context.mock.method(globalThis, 'fetch', async () => {
+    requests++;
     throw new Error('Offline');
   });
   let spoken;
   const engine = {
-    getVoices: () => [{ voiceURI: 'en', name: 'English', lang: 'en-US' }],
+    getVoices: () => [
+      { voiceURI: 'en', name: 'English', lang: 'en-US', localService: true },
+    ],
     cancel() {},
     resume() {},
     speak(utterance) {
@@ -129,6 +99,8 @@ test('network failure falls back to speech, and exiting cancels pending audio', 
   );
   await player.playWord('offline-test');
   assert.equal(spoken.text, 'offline-test');
+  assert.equal(requests, 0);
+  assert.equal(player.getSnapshot().notice, '');
   assert.equal(player.getSnapshot().status, 'playing');
   player.stop();
   spoken.onend();
