@@ -23,6 +23,7 @@ export const WORD_COUNTS = {
 } as const;
 
 const wordCache = new Map<WordLevel, Promise<Word[]>>();
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 async function fetchWordFile(path: string) {
   const response = await fetch(path);
@@ -35,8 +36,8 @@ export function loadWords(level: WordLevel) {
   if (cached) return cached;
 
   const request = Promise.all([
-    fetchWordFile('/data/cet4.json'),
-    ...(level === 'cet6' ? [fetchWordFile('/data/cet6.json')] : []),
+    fetchWordFile(`${basePath}/data/cet4.json`),
+    ...(level === 'cet6' ? [fetchWordFile(`${basePath}/data/cet6.json`)] : []),
   ]).then((groups) => {
     const unique = new Map<string, Word>();
     for (const word of groups.flat()) {
