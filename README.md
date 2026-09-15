@@ -2,6 +2,16 @@
 
 面向大一和英语基础较弱学习者的四六级背词网站。根据考试日期与高考英语成绩安排新词量，通过整句听力、双语理解和间隔复习记忆单词。
 
+## 在线使用
+
+- [打开词序 · GitHub Pages](https://crystalxhorizon.github.io/cixu-cet-study/)
+- [试听 15 条云端语音](https://crystalxhorizon.github.io/cixu-cet-study/?audio=preview)
+- [下载全量音频库 · GitHub Release](https://github.com/CrystalXHorizon/cixu-cet-study/releases/tag/audio-kokoro-v1-1ccd6e72d51e)
+
+直接打开网页即可使用，无需本地安装或部署语音引擎。音频由 GitHub Actions
+生成，网页从 GitHub Pages 加载 MP3；学习记录保存在当前浏览器，可通过
+应用内备份功能导出。
+
 ## 本地运行
 
 ```bash
@@ -13,6 +23,7 @@ npm run dev
 ## 静态构建
 
 ```bash
+node --experimental-transform-types scripts/fetch-cloud-audio.mjs
 npm run build
 ```
 
@@ -24,7 +35,8 @@ npm run build
 暂停、重听和失败重试。浏览器不会下载语音模型，也不依赖系统英语音色。
 
 35,084 条去重录音覆盖 5,709 个词条、16,973 条完整例句，以及分句跟读和
-例句中可点读的词。录音由 GitHub Actions 的 40 个批次生成；独立进程运行
+例句中可点读的词。完整 MP3 文件合计约 554 MB，网站按需加载音频，
+首次打开不会下载整个音频库。录音由 GitHub Actions 的 40 个批次生成；独立进程运行
 Kokoro，先用六条录音检查引擎，再启动全量任务。每条 MP3 都检查时长并
 完整解码，结果存入 GitHub Release。生成入口是
 `scripts/cloud-audio/generate-full.mjs`，仅允许在 GitHub Actions 运行。
@@ -42,7 +54,8 @@ Kokoro，先用六条录音检查引擎，再启动全量任务。每条 MP3 都
 词库例句。支持自然语速、0.8/1.2 倍速、重播和连续播放。
 
 音频全部由 GitHub Actions 上的 Kokoro 生成；用户浏览器只播放静态 MP3。
-修改 `feat/cloud-audio-preview` 分支中的 `scripts/cloud-audio/` 或对应工作流
+修改 `feat/cloud-audio-preview` 分支中的 `scripts/cloud-audio/generate.mjs`、
+`scripts/cloud-audio/package.json` 或试听工作流
 会触发云端生成，产物保留三天。发布时将产物放入
 `public/audio/cloud-preview/`，运行 `node scripts/prepare-cloud-preview.mjs`
 校验音频摘要及词库来源并生成文字字幕，再按现有静态构建流程发布。
@@ -51,4 +64,9 @@ Kokoro，先用六条录音检查引擎，再启动全量任务。每条 MP3 都
 
 ## 许可证
 
-代码采用 [MIT](./LICENSE)，其余本项目原创内容采用 [CC BY-SA 4.0](./LICENSES/CC-BY-SA-4.0.txt)。这是按材料类型区分的许可，不是任选其一。详细范围与署名方式见 [LICENSE-CONTENT.md](./LICENSE-CONTENT.md)；第三方内容保留原许可。
+代码采用 [MIT](./LICENSE)；本项目原创内容及发布的合成语音采用
+[CC BY-SA 4.0](./LICENSES/CC-BY-SA-4.0.txt)。这是按材料类型区分的许可，不是任选其一。
+音频署名为「OpenEtymology 和 词序 — CrystalXHorizon」；重新分发时请保留来源、
+许可链接和修改说明。Kokoro 模型保留 Apache-2.0 许可，模型许可与音频内容许可分别适用。
+详细范围见 [LICENSE-CONTENT.md](./LICENSE-CONTENT.md)，第三方来源见
+[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。

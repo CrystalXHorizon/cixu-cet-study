@@ -19,3 +19,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Repository scope notice (the MIT license text above is unchanged):
+This MIT grant applies to the project's software code. Content and generated
+audio are covered separately by LICENSE-CONTENT.md and
+LICENSES/CC-BY-SA-4.0.txt. Third-party materials retain their respective
+licenses; see THIRD_PARTY_NOTICES.md.

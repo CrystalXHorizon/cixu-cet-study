@@ -14,4 +14,25 @@ https://creativecommons.org/licenses/by-sa/4.0/ 的许可链接。改编内容�
 
 `public/data/cet4.json`、`public/data/cet6.json` 中的来源词库、例句与词频排序信息按照第三方声明中的 CC BY-SA 4.0 条款使用；本项目对这些数据的原创补充和改编亦以 CC BY-SA 4.0 提供。
 
+## 云端合成语音
+
+本项目发布的合成语音按 CC BY-SA 4.0 提供，包括：
+
+- `public/audio/cloud-preview/` 中的 15 条试听录音；
+- GitHub Release 中的全量音频压缩包，以及解压到 `public/audio/full/` 的单词、整句、分句和例句点词录音；
+- GitHub Pages 提供的上述 MP3 文件，以及音频配套的文字字幕和内容清单。
+
+录音由 Kokoro 的 `af_heart` 音色合成，英语文本来自本项目整理的 OpenEtymology
+词库及例句。转载、分发或改编这些录音时，请保留以下署名与来源，并注明修改：
+
+> 音频：OpenEtymology 和 词序 — CrystalXHorizon；由 Kokoro 合成。
+> 来源：https://github.com/CrystalXHorizon/cixu-cet-study
+> 原始词库：https://github.com/openetymology/OpenEtymology
+> 许可：CC BY-SA 4.0，https://creativecommons.org/licenses/by-sa/4.0/
+
+音频库发布地址：
+https://github.com/CrystalXHorizon/cixu-cet-study/releases/tag/audio-kokoro-v1-1ccd6e72d51e 。
+这套内容许可不重新授权 Kokoro 模型或相关依赖；模型保留 Apache-2.0 许可，
+其他依赖保留各自许可，详见第三方声明。
+
 以上范围说明用于区分代码与内容；完整许可文本具有约束力。

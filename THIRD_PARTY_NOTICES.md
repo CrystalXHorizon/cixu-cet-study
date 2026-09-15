@@ -12,6 +12,13 @@ audio checksums. Sentence content is adapted from OpenEtymology under CC BY-SA
 4.0 as described below; the corresponding recordings are distributed under
 CC BY-SA 4.0 with attribution to OpenEtymology and 词序 — CrystalXHorizon.
 
+The complete library contains 35,084 recordings and is distributed in the
+[versioned audio release](https://github.com/CrystalXHorizon/cixu-cet-study/releases/tag/audio-kokoro-v1-1ccd6e72d51e).
+`scripts/cloud-audio/release-lock.json` records archive checksums; generated
+`public/data/audio-integrity.json` records individual MP3 checksums. See
+[LICENSE-CONTENT.md](./LICENSE-CONTENT.md#云端合成语音) for the audio attribution
+and scope. The model is not bundled in the website or audio release.
+
 ## OpenEtymology CET wordbooks
 
 Word lists, phonetics, Chinese definitions, and bilingual example sentences are adapted from the CET4 and CET6 wordbooks in [OpenEtymology](https://github.com/openetymology/OpenEtymology).
