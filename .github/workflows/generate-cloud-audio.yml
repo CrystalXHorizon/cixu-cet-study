@@ -1,0 +1,42 @@
+name: Generate cloud audio preview
+
+on:
+  push:
+    branches: [feat/cloud-audio-preview]
+    paths:
+      - .github/workflows/generate-cloud-audio.yml
+      - scripts/cloud-audio/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-audio-preview
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install audio encoder
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install cloud-only speech engine
+        working-directory: scripts/cloud-audio
+        run: npm install --no-audit --no-fund
+      - name: Generate and validate 15 MP3 samples
+        run: node scripts/cloud-audio/generate.mjs
+      - name: Preserve dependency versions used in this run
+        run: cp scripts/cloud-audio/package-lock.json public/audio/cloud-preview/runtime-package-lock.json
+      - name: Upload generated audio
+        uses: actions/upload-artifact@v4
+        with:
+          name: cixu-cloud-audio-15
+          path: public/audio/cloud-preview
+          if-no-files-found: error
+          retention-days: 3
