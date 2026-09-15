@@ -15,7 +15,7 @@ export function PlaybackNotice({
   );
   if (
     noticeOnly
-      ? !playback.notice
+      ? !playback.notice && playback.status !== 'error'
       : playback.status === 'idle' && !playback.notice
   )
     return null;

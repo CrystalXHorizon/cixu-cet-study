@@ -40,6 +40,14 @@ jobs:
             echo "VITE_BASE_PATH=/$repository_name/" >> "$GITHUB_ENV"
           fi
 
+      - name: Verify cloud audio completeness and checksums
+        run: node --experimental-transform-types scripts/fetch-cloud-audio.mjs
+
+      - name: Check player behavior and types
+        run: |
+          node --experimental-transform-types --test tests/*.test.mjs
+          npx tsc --noEmit
+
       - name: Build static site
         run: npm run build
 

@@ -5,7 +5,8 @@ on:
     branches: [feat/cloud-audio-preview]
     paths:
       - .github/workflows/generate-cloud-audio.yml
-      - scripts/cloud-audio/**
+      - scripts/cloud-audio/generate.mjs
+      - scripts/cloud-audio/package.json
   workflow_dispatch:
 
 permissions:

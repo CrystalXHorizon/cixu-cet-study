@@ -6,6 +6,7 @@
 
 ```bash
 npm install
+node --experimental-transform-types scripts/fetch-cloud-audio.mjs
 npm run dev
 ```
 
@@ -16,6 +17,22 @@ npm run build
 ```
 
 静态文件生成在 `dist`。仓库中的 GitHub Actions 工作流会在 `main` 分支更新后自动部署 GitHub Pages。
+
+## 全量云端语音
+
+正式页面的单词、整句、分句和例句点词统一播放预生成的 MP3，支持调速、
+暂停、重听和失败重试。浏览器不会下载语音模型，也不依赖系统英语音色。
+
+35,084 条去重录音覆盖 5,709 个词条、16,973 条完整例句，以及分句跟读和
+例句中可点读的词。录音由 GitHub Actions 的 40 个批次生成；独立进程运行
+Kokoro，先用六条录音检查引擎，再启动全量任务。每条 MP3 都检查时长并
+完整解码，结果存入 GitHub Release。生成入口是
+`scripts/cloud-audio/generate-full.mjs`，仅允许在 GitHub Actions 运行。
+
+`scripts/cloud-audio/release-lock.json` 固定批次下载地址和 SHA-256。
+首次本地预览或静态构建前运行上面的下载命令；它只下载成品音频，校验
+全部文件和词库覆盖率，并生成播放索引。GitHub Pages 自动执行这些检查，
+不会部署不完整的音频库。修改词库后需要重新生成并更新发布清单。
 
 词库、例句及第三方数据授权说明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 

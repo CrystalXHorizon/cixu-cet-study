@@ -21,7 +21,6 @@ import {
 import { SentencePicker } from '@/components/sentence-picker';
 import {
   DEFAULT_AUDIO,
-  englishVoices,
   sentenceChunks,
   speechPlayer,
   type AudioPreferences,
@@ -54,11 +53,6 @@ export function ListeningPractice({
   const [stage, setStage] = useState(0);
   const [repetitions, setRepetitions] = useState(1);
   const [understoodCount, setUnderstoodCount] = useState(0);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() =>
-    typeof window === 'undefined'
-      ? []
-      : englishVoices(window.speechSynthesis?.getVoices() ?? []),
-  );
   const playback = useSyncExternalStore(
     speechPlayer.subscribe,
     speechPlayer.getSnapshot,
@@ -68,15 +62,14 @@ export function ListeningPractice({
   const done = index >= items.length;
 
   useEffect(() => {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    const update = () => setVoices(englishVoices(synth.getVoices()));
-    synth.addEventListener('voiceschanged', update);
-    return () => {
-      synth.removeEventListener('voiceschanged', update);
-      speechPlayer.stop();
-    };
-  }, []);
+    if (item)
+      void speechPlayer.prepare([
+        item.example.english,
+        item.word.word.toLowerCase(),
+        items[index + 1]?.example.english ?? item.example.english,
+      ]);
+    return () => speechPlayer.stop();
+  }, [item, items, index]);
 
   function updatePreferences(next: AudioPreferences) {
     speechPlayer.stop();
@@ -112,11 +105,7 @@ export function ListeningPractice({
       </main>
     );
 
-  const unavailable = typeof window !== 'undefined' && !window.speechSynthesis;
   const busy = playback.status === 'playing';
-  const chosenVoice = voices.find(
-    (voice) => voice.voiceURI === preferences.voiceURI,
-  );
   return (
     <main className="min-h-screen bg-background px-5 py-6 text-foreground">
       <header className="mx-auto flex max-w-4xl items-center gap-4">
@@ -170,35 +159,10 @@ export function ListeningPractice({
         <article className="rounded-[26px] border border-border bg-card p-6 sm:p-10">
           <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto]">
             <div className="min-w-0">
-              <label
-                htmlFor="listening-voice"
-                className="mb-2 block text-sm text-muted-foreground"
-              >
-                英语音色
-              </label>
-              <Select
-                value={chosenVoice?.voiceURI ?? 'auto'}
-                onValueChange={(value) =>
-                  updatePreferences({
-                    ...preferences,
-                    voiceURI: value === 'auto' ? '' : (value ?? ''),
-                  })
-                }
-              >
-                <SelectTrigger id="listening-voice" className="h-10 w-full">
-                  <SelectValue>
-                    {chosenVoice?.name ?? '自动选择英语音色'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectItem value="auto">自动选择英语音色</SelectItem>
-                  {voices.map((voice) => (
-                    <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                      {voice.name} · {voice.lang}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="mb-2 text-sm text-muted-foreground">英语音色</p>
+              <p className="flex h-10 items-center text-sm">
+                美式女声 · 自然朗读
+              </p>
             </div>
             <div>
               <label
@@ -376,25 +340,22 @@ export function ListeningPractice({
           <output
             className={cn(
               'mt-3 block min-h-6 text-center text-sm',
-              unavailable || playback.status === 'error'
+              playback.status === 'error'
                 ? 'text-destructive'
                 : 'text-muted-foreground',
             )}
           >
-            {unavailable
-              ? '此浏览器暂不支持朗读，可以查看原文或换浏览器收听。'
-              : playback.message ||
-                (playback.status === 'loading'
-                  ? '正在准备英语语音…'
-                  : playback.status === 'playing'
-                    ? '正在播放'
-                    : playback.status === 'paused'
-                      ? '已暂停'
-                      : voices[0]
-                        ? `当前音色：${chosenVoice?.name ?? voices[0].name}`
-                        : '使用浏览器英语语音')}
+            {playback.message || '美式女声 · 音频已预先生成'}
           </output>
-          {playback.retryable && <Button variant="outline" className="mx-auto mt-2 flex" onClick={speechPlayer.retry}>重试播放</Button>}
+          {playback.retryable && (
+            <Button
+              variant="outline"
+              className="mx-auto mt-2 flex"
+              onClick={speechPlayer.retry}
+            >
+              重试播放
+            </Button>
+          )}
           {stage < 2 ? (
             <Button
               className="mt-6 h-11 w-full rounded-full"

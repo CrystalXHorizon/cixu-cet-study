@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { VocabApp } from '@/components/vocab-app';
 import '@/app/globals.css';
+import { prepareAudioCatalog } from '@/lib/cloud-audio';
 
 const root = document.getElementById('root');
 
@@ -13,6 +14,7 @@ const CloudAudioPreview = lazy(
 );
 const audioPreview =
   new URLSearchParams(window.location.search).get('audio') === 'preview';
+if (!audioPreview) void prepareAudioCatalog().catch(() => {});
 
 createRoot(root).render(
   audioPreview ? (

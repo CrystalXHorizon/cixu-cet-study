@@ -37,6 +37,10 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/public/audio/full/
+/public/audio/shards/
+/public/data/audio-index.json
+/public/data/audio-integrity.json
 
 # local dependency repair cache
 /.npm-fresh-cache/

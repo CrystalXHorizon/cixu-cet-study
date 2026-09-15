@@ -808,6 +808,7 @@ export function VocabApp() {
 
   if (view === 'review' && currentWord && currentItem && currentExample) {
     return (
+      <>
       <ReviewSession
         key={`${sessionMode}-${sessionIndex}`}
         word={currentWord}
@@ -830,6 +831,8 @@ export function VocabApp() {
         sentenceMarks={study.sentenceMarks}
         onSentenceMarks={(example, selected) => setStudy((current) => saveSentenceMarks(current, example, selected, dayKey()))}
       />
+      <PlaybackNotice />
+      </>
     );
   }
 
@@ -1726,7 +1729,10 @@ function ReviewSession({
     const timeout = window.setTimeout(() => speakSentence(example.english), 260);
     return () => window.clearTimeout(timeout);
   }, [done, isListening, word.id, example.english]);
-  useEffect(() => () => speechPlayer.stop(), [word.id, phase, example.english, done]);
+  useEffect(() => {
+    if (!done) void speechPlayer.prepare([word.word.toLowerCase(), example.english]);
+    return () => speechPlayer.stop();
+  }, [word.id, word.word, phase, example.english, done]);
 
   if (done) {
     const rate = stats.reviewed
