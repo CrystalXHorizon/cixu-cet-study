@@ -45,6 +45,11 @@ if (!isMainThread) {
   const records = [];
   const workers = Math.min(3, Math.max(1, availableParallelism() - 1));
   console.log(`${name}: ${items.length} recordings, ${workers} synthesis workers, corpus ${corpus.corpusHash}`);
+  // Complete the shared model download before workers open the ONNX cache.
+  // Concurrent first downloads can otherwise expose an incomplete model file.
+  const { KokoroTTS } = await import('kokoro-js');
+  const preload = await KokoroTTS.from_pretrained(modelId, { dtype: 'q8', device: 'cpu' });
+  await preload.model.dispose();
   const started = Date.now();
   await Promise.all(Array.from({ length: workers }, (_, worker) => new Promise((resolve, reject) => {
     const instance = new Worker(new URL(import.meta.url), { workerData: { directory, items: items.filter((_, i) => i % workers === worker) } });
