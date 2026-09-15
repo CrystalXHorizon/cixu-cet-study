@@ -18,7 +18,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  canary:
+    name: Check six recordings before full generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm install --no-audit --no-fund
+        working-directory: scripts/cloud-audio
+      - run: node --experimental-transform-types scripts/cloud-audio/generate-full.mjs 0 40 --canary
   generate:
+    needs: canary
     name: Audio shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 120

@@ -1,13 +1,14 @@
-import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, fork } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { loadCorpus, digest, audioVersion, modelId, voice } from './corpus.mjs';
 
 if (process.env.GITHUB_ACTIONS !== 'true') throw new Error('Speech synthesis runs only in GitHub Actions.');
 
-if (!isMainThread) {
+if (process.argv[2] === '--child') {
+  const workerData = JSON.parse(await readFile(process.argv[3], 'utf8'));
   const { KokoroTTS } = await import('kokoro-js');
   const { StyleTextToSpeech2Model, AutoTokenizer } = await import('@huggingface/transformers');
   const model = await StyleTextToSpeech2Model.from_pretrained(modelId, {
@@ -29,15 +30,17 @@ if (!isMainThread) {
     execFileSync('ffmpeg', ['-v', 'error', '-xerror', '-threads', '1', '-i', mp3, '-f', 'null', '-']);
     const data = await readFile(mp3);
     await unlink(wav);
-    parentPort.postMessage({ ...item, duration, bytes: data.length, sha256: digest(data), generationMs: Date.now() - started });
+    await new Promise((resolve, reject) => process.send({ ...item, duration, bytes: data.length, sha256: digest(data), generationMs: Date.now() - started }, (error) => error ? reject(error) : resolve()));
   }
   await model.dispose();
+  process.disconnect();
 } else {
   const index = Number(process.argv[2]);
   const count = Number(process.argv[3]);
   if (!Number.isInteger(index) || !Number.isInteger(count) || index < 0 || index >= count) throw new Error('Expected shard index and count.');
   const corpus = await loadCorpus();
-  const items = corpus.items.filter((_, position) => position % count === index);
+  const allItems = corpus.items.filter((_, position) => position % count === index);
+  const items = process.argv[4] === '--canary' ? allItems.slice(0, 6) : allItems;
   const name = `shard-${String(index).padStart(3, '0')}`;
   const directory = path.resolve('work', name);
   await mkdir(path.join(directory, 'audio/shards'), { recursive: true });
@@ -51,15 +54,20 @@ if (!isMainThread) {
   const preload = await KokoroTTS.from_pretrained(modelId, { dtype: 'q8', device: 'cpu' });
   await preload.model.dispose();
   const started = Date.now();
-  await Promise.all(Array.from({ length: workers }, (_, worker) => new Promise((resolve, reject) => {
-    const instance = new Worker(new URL(import.meta.url), { workerData: { directory, items: items.filter((_, i) => i % workers === worker) } });
+  await Promise.all(Array.from({ length: workers }, async (_, worker) => {
+    const input = path.join(directory, `worker-${worker}.json`);
+    await writeFile(input, JSON.stringify({ directory, items: items.filter((_, i) => i % workers === worker) }));
+    return new Promise((resolve, reject) => {
+    // ONNX native bindings must run in separate processes, not V8 worker threads.
+    const instance = fork(fileURLToPath(import.meta.url), ['--child', input], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
     instance.on('message', (record) => {
       records.push(record);
       if (records.length % 25 === 0 || records.length === items.length) console.log(`${name}: ${records.length}/${items.length}, ${Math.round((Date.now() - started) / 1000)}s elapsed`);
     });
     instance.on('error', reject);
     instance.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`Synthesis worker exited ${code}`)));
-  })));
+    });
+  }));
   if (records.length !== items.length) throw new Error('Incomplete shard');
   records.sort((a, b) => a.id.localeCompare(b.id));
   await writeFile(path.join(directory, 'audio/shards', `${name}.json`), JSON.stringify({
