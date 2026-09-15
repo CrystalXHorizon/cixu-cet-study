@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 1,
+  "version": "kokoro-heart-q8-48k-v1",
+  "corpusHash": "1ccd6e72d51e88316c4ded17feed812adefdc47020b152d899c5b390de92c7d1",
+  "tag": "audio-kokoro-v1-1ccd6e72d51e",
+  "assets": [
+    {
+      "shard": 0,
+      "name": "shard-000.tar.gz",
+      "id": 564957618,
+      "size": 13514875,
+      "sha256": "ac6e119530c08f59cb969dc0cadccfd7daf300c0547dfd588c744a1781fa4248",
+      "records": 878,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-000.tar.gz"
+    },
+    {
+      "shard": 1,
+      "name": "shard-001.tar.gz",
+      "id": 564936560,
+      "size": 13348178,
+      "sha256": "60706789ee63a70209dbe21c28681c55cb5b65bbcda262d31839c4815762ade3",
+      "records": 878,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-001.tar.gz"
+    },
+    {
+      "shard": 2,
+      "name": "shard-002.tar.gz",
+      "id": 564959625,
+      "size": 13724025,
+      "sha256": "e389cb53bffe984b71181b2fef3b6739f78caced83b6dcbe98edcd2247874584",
+      "records": 878,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-002.tar.gz"
+    },
+    {
+      "shard": 3,
+      "name": "shard-003.tar.gz",
+      "id": 564956129,
+      "size": 13403788,
+      "sha256": "c983d92d54e96db213fc63ae7419c11c3c259cd94a4e4d2f21a67a8727dec680",
+      "records": 878,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-003.tar.gz"
+    },
+    {
+      "shard": 4,
+      "name": "shard-004.tar.gz",
+      "id": 564956983,
+      "size": 13491198,
+      "sha256": "31e37fa6dfdb205a006e42f16f06152a08a879094f7045d87095cc6fd02f7ea8",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-004.tar.gz"
+    },
+    {
+      "shard": 5,
+      "name": "shard-005.tar.gz",
+      "id": 564954239,
+      "size": 13373387,
+      "sha256": "8960c419db08cb0ce678d87e1fb9245adbbee32191c94547d4e9b46d92e262a2",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-005.tar.gz"
+    },
+    {
+      "shard": 6,
+      "name": "shard-006.tar.gz",
+      "id": 564957280,
+      "size": 13791600,
+      "sha256": "2fa8d2af29995a594612fa3bbb8c1ad3f9ac50d86496497db537ca5fadb59dd2",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-006.tar.gz"
+    },
+    {
+      "shard": 7,
+      "name": "shard-007.tar.gz",
+      "id": 564945533,
+      "size": 13331511,
+      "sha256": "568f5f8d47f936ff46fcf622dccd0b30530b78c91b63e9ea3fd4f1dc48a57f06",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-007.tar.gz"
+    },
+    {
+      "shard": 8,
+      "name": "shard-008.tar.gz",
+      "id": 564955830,
+      "size": 13547488,
+      "sha256": "982f0a969c2f69f4ade5c43ec6ae1e0d2bea6dbb7575bd326368a174f58e945d",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-008.tar.gz"
+    },
+    {
+      "shard": 9,
+      "name": "shard-009.tar.gz",
+      "id": 564955325,
+      "size": 13451835,
+      "sha256": "04af2f92a9b2813c39f9bc16a3074d99765ca42493b7abb9b4c15dc7d46ea4bd",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-009.tar.gz"
+    },
+    {
+      "shard": 10,
+      "name": "shard-010.tar.gz",
+      "id": 564940749,
+      "size": 13477361,
+      "sha256": "d9ffaa393889f73f57bd19b7bb71989bc6bc2c1d8045be15360bf78658908522",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-010.tar.gz"
+    },
+    {
+      "shard": 11,
+      "name": "shard-011.tar.gz",
+      "id": 564940433,
+      "size": 13191868,
+      "sha256": "8da9d8821f256e8fc4e6c9bb5b84d580bf6fba72671216c78ab6c420fb60d4a3",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-011.tar.gz"
+    },
+    {
+      "shard": 12,
+      "name": "shard-012.tar.gz",
+      "id": 564957914,
+      "size": 13464948,
+      "sha256": "7cb83043f7b6bfe0e3800d1f48958470dae671938a9ce044d084fa52c22fb7c6",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-012.tar.gz"
+    },
+    {
+      "shard": 13,
+      "name": "shard-013.tar.gz",
+      "id": 564959047,
+      "size": 13411369,
+      "sha256": "8eee8d6e2c0f0183ac75fd73c5b56f6f0cddda19be80be36725bd5888d5fd0c5",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-013.tar.gz"
+    },
+    {
+      "shard": 14,
+      "name": "shard-014.tar.gz",
+      "id": 564945893,
+      "size": 13447753,
+      "sha256": "ac5cfef5ed4514e0fa51d18c41cb3323c8b5aa08a34997c8bda3fa580bea004d",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-014.tar.gz"
+    },
+    {
+      "shard": 15,
+      "name": "shard-015.tar.gz",
+      "id": 564934635,
+      "size": 13529667,
+      "sha256": "cd3414c11fff6b0774194a2e3f8a9fe3442dcb5d78bebec2b6ccbf17b7ee9b12",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-015.tar.gz"
+    },
+    {
+      "shard": 16,
+      "name": "shard-016.tar.gz",
+      "id": 564943286,
+      "size": 13629762,
+      "sha256": "8ffa28f43a7780272433cae734f647abd8577d8022ba13d46a82902283aca9d6",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-016.tar.gz"
+    },
+    {
+      "shard": 17,
+      "name": "shard-017.tar.gz",
+      "id": 564938063,
+      "size": 13669603,
+      "sha256": "71c415bcebbab6a258fd8f9a7cea5377bfc397ebe7f347727556d42492b80234",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-017.tar.gz"
+    },
+    {
+      "shard": 18,
+      "name": "shard-018.tar.gz",
+      "id": 564956712,
+      "size": 13410235,
+      "sha256": "4238a7e37ab8e56b676085e1ed9414e2099404e979f3b870ed6542e6e8627609",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-018.tar.gz"
+    },
+    {
+      "shard": 19,
+      "name": "shard-019.tar.gz",
+      "id": 564956455,
+      "size": 13658992,
+      "sha256": "3b2fe8bdeab175e4f11064d043d2bb0fefa90fedfb674061fb6cd74b6f818b70",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-019.tar.gz"
+    },
+    {
+      "shard": 20,
+      "name": "shard-020.tar.gz",
+      "id": 564972589,
+      "size": 13565281,
+      "sha256": "99c1998370a5431087d6db833bca6296f6e4a41c4215e367860a6ba498476e11",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-020.tar.gz"
+    },
+    {
+      "shard": 21,
+      "name": "shard-021.tar.gz",
+      "id": 564971279,
+      "size": 13343864,
+      "sha256": "8e8505d3192d4a0e3bf8dacdf6157b2edf1b0daa47cfa2846f6aaaf218f8dd09",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-021.tar.gz"
+    },
+    {
+      "shard": 22,
+      "name": "shard-022.tar.gz",
+      "id": 564960653,
+      "size": 13475237,
+      "sha256": "04236afcde5c5fe0f9fc0dd9d7e4614973d210b82cfcc95aa54a84c4f7d26d92",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-022.tar.gz"
+    },
+    {
+      "shard": 23,
+      "name": "shard-023.tar.gz",
+      "id": 564962254,
+      "size": 13340891,
+      "sha256": "52a18d057a210e709002a31f20902ae523cf439e02db6b5c3fd86a4a2cd9b99a",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-023.tar.gz"
+    },
+    {
+      "shard": 24,
+      "name": "shard-024.tar.gz",
+      "id": 564969240,
+      "size": 13745317,
+      "sha256": "1d53a19a39ed0a7559c68481729292bfbee90fecfcd0630427200f0c1a24e559",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-024.tar.gz"
+    },
+    {
+      "shard": 25,
+      "name": "shard-025.tar.gz",
+      "id": 564961761,
+      "size": 13339276,
+      "sha256": "8d239df3ff9b77953eefaa9d179e44a78ce4a37b1aa4156f8d7a2cb536e417a3",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-025.tar.gz"
+    },
+    {
+      "shard": 26,
+      "name": "shard-026.tar.gz",
+      "id": 564964368,
+      "size": 13627209,
+      "sha256": "bc1b90b92904229568906b9e84109ee8a81b3ccac5f1f90e1c48baaa4c276dd4",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-026.tar.gz"
+    },
+    {
+      "shard": 27,
+      "name": "shard-027.tar.gz",
+      "id": 564977937,
+      "size": 13561125,
+      "sha256": "765ade4cdad2a1bcb632ec01c486bfce2adb961d71e1ddf76d1d237459fe20b1",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-027.tar.gz"
+    },
+    {
+      "shard": 28,
+      "name": "shard-028.tar.gz",
+      "id": 564975162,
+      "size": 13556015,
+      "sha256": "e66ab487e1f17fa1110380006b018ae04d99b7faf4e4c88e7c157995a5b303f3",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-028.tar.gz"
+    },
+    {
+      "shard": 29,
+      "name": "shard-029.tar.gz",
+      "id": 564976955,
+      "size": 13395522,
+      "sha256": "5a24e246006fcb159f8f3fe3eb87b51c3ffdbab7b0078f8963b695db1f9fe947",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-029.tar.gz"
+    },
+    {
+      "shard": 30,
+      "name": "shard-030.tar.gz",
+      "id": 564974921,
+      "size": 13220481,
+      "sha256": "ca6282d3d0052dd807bb09a92c582fc1b1ae92caba3cdfb5b8ea2ef83c4c8945",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-030.tar.gz"
+    },
+    {
+      "shard": 31,
+      "name": "shard-031.tar.gz",
+      "id": 564989108,
+      "size": 13526420,
+      "sha256": "b2c42b11de6e13ac8f530c6f28d98d048b1c5a5ceca57935a5278aa7736d4777",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-031.tar.gz"
+    },
+    {
+      "shard": 32,
+      "name": "shard-032.tar.gz",
+      "id": 564980325,
+      "size": 13288938,
+      "sha256": "731781bd04d9f742747fd00681f6389d0150fd15bc70e44cea3af15811fd2911",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-032.tar.gz"
+    },
+    {
+      "shard": 33,
+      "name": "shard-033.tar.gz",
+      "id": 564969515,
+      "size": 13892884,
+      "sha256": "3d21402b4bbc38eff5f281abec6d3c6d9586da3a582d0912c3826c7a6df02698",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-033.tar.gz"
+    },
+    {
+      "shard": 34,
+      "name": "shard-034.tar.gz",
+      "id": 564991587,
+      "size": 13317534,
+      "sha256": "3565ce1b542f1858cf100a5dd48e488707b3fbe2aa0872ae84453d521527f6ba",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-034.tar.gz"
+    },
+    {
+      "shard": 35,
+      "name": "shard-035.tar.gz",
+      "id": 564978513,
+      "size": 13381611,
+      "sha256": "97a81c30126aee6dff550a5f1147c66f640e1629259e6557b37d232f5d9cca01",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-035.tar.gz"
+    },
+    {
+      "shard": 36,
+      "name": "shard-036.tar.gz",
+      "id": 564992587,
+      "size": 13546157,
+      "sha256": "1821af73484549d3cd700dbbff6c3775440af69d89d6c13385865cfa60b0dd1d",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-036.tar.gz"
+    },
+    {
+      "shard": 37,
+      "name": "shard-037.tar.gz",
+      "id": 564979997,
+      "size": 13392372,
+      "sha256": "1d893a3c4364717fb79e4547df38237759508b3f1edb5b10e16d1a877aa5a6cc",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-037.tar.gz"
+    },
+    {
+      "shard": 38,
+      "name": "shard-038.tar.gz",
+      "id": 564981510,
+      "size": 13262845,
+      "sha256": "4b61a086f0bcf443c53a4bd22e16176f21166cbffdd5e2658325fa3aec48bb44",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-038.tar.gz"
+    },
+    {
+      "shard": 39,
+      "name": "shard-039.tar.gz",
+      "id": 564990433,
+      "size": 13782467,
+      "sha256": "c1015ec376693edea580ba85c3cafc9be22b52d987f2a4458f75e2353367508a",
+      "records": 877,
+      "url": "https://github.com/CrystalXHorizon/cixu-cet-study/releases/download/audio-kokoro-v1-1ccd6e72d51e/shard-039.tar.gz"
+    }
+  ]
+}
