@@ -967,6 +967,7 @@ function AppHeader({
           <span className="text-[17px] font-semibold tracking-[0.12em]">词序</span>
         </button>
         <div className="flex items-center gap-2">
+          <a href="?audio=preview" className="rounded-full px-3 py-2 text-sm font-medium text-primary hover:bg-secondary">新语音试听</a>
           <Button variant="ghost" className="hidden text-muted-foreground sm:flex" onClick={onSettings}>
             {levelLabel(level)}
             <ChevronRight data-icon="inline-end" />

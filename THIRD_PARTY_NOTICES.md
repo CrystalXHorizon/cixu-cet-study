@@ -1,5 +1,16 @@
 # Third-party data notices
 
+## Cloud-generated speech preview
+
+The 15 recordings in `public/audio/cloud-preview/` are synthetic speech generated
+on GitHub Actions using [Kokoro](https://github.com/hexgrad/kokoro), `kokoro-js`
+1.2.1 and the Apache-2.0 licensed Kokoro-82M model (voice `af_heart`). The speech
+engine is a build-time tool and is not shipped to or run in visitors' browsers.
+The accompanying manifest records the source workflow run, input sentences and
+audio checksums. Sentence content is adapted from OpenEtymology under CC BY-SA
+4.0 as described below; the corresponding recordings are distributed under
+CC BY-SA 4.0 with attribution to OpenEtymology and 词序 — CrystalXHorizon.
+
 ## OpenEtymology CET wordbooks
 
 Word lists, phonetics, Chinese definitions, and bilingual example sentences are adapted from the CET4 and CET6 wordbooks in [OpenEtymology](https://github.com/openetymology/OpenEtymology).

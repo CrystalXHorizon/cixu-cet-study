@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T04:13:07.331Z",
+  "engine": {
+    "library": "kokoro-js",
+    "version": "1.2.1",
+    "model": "onnx-community/Kokoro-82M-v1.0-ONNX",
+    "voice": "af_heart",
+    "language": "en-US",
+    "dtype": "q8",
+    "speed": 1
+  },
+  "generation": {
+    "platform": "GitHub Actions",
+    "repository": "CrystalXHorizon/cixu-cet-study",
+    "commit": "6d2b1881e01f7f11aa2e4f529a701721ad827720",
+    "runId": "34927866843",
+    "runUrl": "https://github.com/CrystalXHorizon/cixu-cet-study/actions/runs/34927866843"
+  },
+  "samples": [
+    {
+      "id": "sentence-01",
+      "word": "time",
+      "group": "日常短句",
+      "english": "Time flies when you're having fun.",
+      "chinese": "欢乐时光总是过得飞快。",
+      "file": "sentence-01.mp3",
+      "duration": 2.52,
+      "bytes": 20397,
+      "sha256": "01a85d2f1ca32982aef0eaec5800cfddb2bd3d1af9c514536fcfd4bc6fe5543b"
+    },
+    {
+      "id": "sentence-02",
+      "word": "practice",
+      "group": "日常短句",
+      "english": "Regular practice improves your skills.",
+      "chinese": "定期练习能提升你的技能。",
+      "file": "sentence-02.mp3",
+      "duration": 2.856,
+      "bytes": 23085,
+      "sha256": "213099083d5bf77ca9fe59f792fd85ce01d9a704a63be2c2a64243e7370912a1"
+    },
+    {
+      "id": "sentence-03",
+      "word": "learn",
+      "group": "日常短句",
+      "english": "He is learning to play the piano.",
+      "chinese": "他正在学习弹钢琴。",
+      "file": "sentence-03.mp3",
+      "duration": 2.448,
+      "bytes": 19821,
+      "sha256": "a78f86ac5e930b1d2b02f8fc4afec4b97cdb23e9f695c51fff1da14690ef8d55"
+    },
+    {
+      "id": "sentence-04",
+      "word": "remember",
+      "group": "日常短句",
+      "english": "I can't remember where I put my keys.",
+      "chinese": "我想不起钥匙放哪儿了。",
+      "file": "sentence-04.mp3",
+      "duration": 2.736,
+      "bytes": 22125,
+      "sha256": "c2f52a0780c5782d55de90ed5aca3869203716fc5b8ac18a249f97ade66d81b1"
+    },
+    {
+      "id": "sentence-05",
+      "word": "possible",
+      "group": "日常短句",
+      "english": "It is possible to finish the project by Friday.",
+      "chinese": "有可能在周五前完成这个项目。",
+      "file": "sentence-05.mp3",
+      "duration": 3.384,
+      "bytes": 27309,
+      "sha256": "3f0d5a2d229dfda770b9c89eaa4114e5d85c81de2e0ec4e290f334f1154e578a"
+    },
+    {
+      "id": "sentence-06",
+      "word": "people",
+      "group": "自然连读",
+      "english": "The park was full of people enjoying the sunshine.",
+      "chinese": "公园里挤满了享受阳光的人们。",
+      "file": "sentence-06.mp3",
+      "duration": 3.384,
+      "bytes": 27309,
+      "sha256": "5c86f471544d89a3495811d36526f1b486fe4c55f4533ca7d93e87a3ee48aa40"
+    },
+    {
+      "id": "sentence-07",
+      "word": "understand",
+      "group": "自然连读",
+      "english": "She couldn't understand why he left without saying goodbye.",
+      "chinese": "她无法理解他为何不告而别。",
+      "file": "sentence-07.mp3",
+      "duration": 3.816,
+      "bytes": 30765,
+      "sha256": "4bdd08db91212f1aa1b0dff99e1710a625258663ae3e6c8755d0b4681dae6136"
+    },
+    {
+      "id": "sentence-08",
+      "word": "change",
+      "group": "自然连读",
+      "english": "She decided to change her career path after graduation.",
+      "chinese": "她决定毕业后转换职业方向。",
+      "file": "sentence-08.mp3",
+      "duration": 4.128,
+      "bytes": 33261,
+      "sha256": "1d5e56d09f2a877854a051d3d259bc355fd3deef4d0a5d6e59d66035c36e86c6"
+    },
+    {
+      "id": "sentence-09",
+      "word": "learn",
+      "group": "自然连读",
+      "english": "Children learn languages more easily than adults.",
+      "chinese": "儿童比成年人更容易学习语言。",
+      "file": "sentence-09.mp3",
+      "duration": 3.552,
+      "bytes": 28653,
+      "sha256": "13c0e1e57be511a89e7048694378707683569df91e00f2f7da5d5190ecd70dfc"
+    },
+    {
+      "id": "sentence-10",
+      "word": "support",
+      "group": "自然连读",
+      "english": "She always supports her friends in difficult times.",
+      "chinese": "她总是在朋友困难时给予支持。",
+      "file": "sentence-10.mp3",
+      "duration": 3.336,
+      "bytes": 26925,
+      "sha256": "ad8c2d327d89c5afb5442b0c7512c6b0d1f25c9497065b48c94c269de2d2a8c2"
+    },
+    {
+      "id": "sentence-11",
+      "word": "environment",
+      "group": "进阶表达",
+      "english": "Polar bears are highly sensitive to changes in their Arctic environment.",
+      "chinese": "北极熊对北极环境的变化极为敏感。",
+      "file": "sentence-11.mp3",
+      "duration": 5.136,
+      "bytes": 41325,
+      "sha256": "7520e7d17aeb455aa8edf6e1528248cac5b02895b0fae50aca8952853845963b"
+    },
+    {
+      "id": "sentence-12",
+      "word": "education",
+      "group": "进阶表达",
+      "english": "Early childhood education is crucial for cognitive development.",
+      "chinese": "幼儿教育对认知发展至关重要。",
+      "file": "sentence-12.mp3",
+      "duration": 4.632,
+      "bytes": 37293,
+      "sha256": "1fe692ae49d766b33f8fcd97ce5737daf03584575ec16aca8ca991fd8f1539bf"
+    },
+    {
+      "id": "sentence-13",
+      "word": "achieve",
+      "group": "进阶表达",
+      "english": "She worked hard to achieve her dream of becoming a doctor.",
+      "chinese": "她努力实现了成为医生的梦想。",
+      "file": "sentence-13.mp3",
+      "duration": 3.84,
+      "bytes": 30957,
+      "sha256": "a73c4e66bdd80ce89120a3ee7eca2957cf772646cfee8cef9765688623dde897"
+    },
+    {
+      "id": "sentence-14",
+      "word": "knowledge",
+      "group": "进阶表达",
+      "english": "The book provides practical knowledge for beginners.",
+      "chinese": "这本书为初学者提供实用知识。",
+      "file": "sentence-14.mp3",
+      "duration": 3.336,
+      "bytes": 26925,
+      "sha256": "795ee71418f5282fb114be10cb6c4186279e29eeba66ae70b824da70157a607d"
+    },
+    {
+      "id": "sentence-15",
+      "word": "responsibility",
+      "group": "进阶表达",
+      "english": "The manager accepted full responsibility for the project's failure.",
+      "chinese": "经理承担了项目失败的全部责任。",
+      "file": "sentence-15.mp3",
+      "duration": 4.728,
+      "bytes": 38061,
+      "sha256": "2f0029bcba50fc9c6ec8f43a35369c445c3f483e457162eaee3803fc6c743256"
+    }
+  ]
+}
