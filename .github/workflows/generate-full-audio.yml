@@ -1,0 +1,49 @@
+name: Generate full cloud audio library
+
+on:
+  push:
+    branches: [feat/cloud-audio-preview]
+    paths:
+      - .github/workflows/generate-full-audio.yml
+      - scripts/cloud-audio/generate-full.mjs
+      - scripts/cloud-audio/corpus.mjs
+      - lib/audio-text.ts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-cloud-audio
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Audio shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install MP3 tools
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install cloud speech engine
+        working-directory: scripts/cloud-audio
+        run: npm install --no-audit --no-fund
+      - name: Generate and decode-check every recording
+        run: node --experimental-transform-types scripts/cloud-audio/generate-full.mjs ${{ matrix.shard }} 40
+      - name: Save completed batch
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-audio-shard-${{ matrix.shard }}
+          path: work/cloud-audio-output/*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
